@@ -1,0 +1,1919 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bloch Sphere — A Quantum Gate Tutorial</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,600&family=JetBrains+Mono:wght@400;500;700&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    /* Dark theme (default) */
+    --bg: #0a0e16;
+    --bg-panel: #11161f;
+    --bg-elevated: #161c27;
+    --border: #1f2733;
+    --border-bright: #2a3445;
+    --text: #e8ecf1;
+    --text-dim: #b0bac8;
+    --text-faint: #828ca0;
+    --accent: #4dd4ff;
+    --accent-dim: #1a6c87;
+    --warm: #ff9d5c;
+    --magenta: #ff5cb4;
+    --yellow: #f5d76e;
+    --green: #8ee07a;
+    --shadow-glow: 0 0 24px rgba(77, 212, 255, 0.15);
+    --gradient-top: rgba(77, 212, 255, 0.04);
+    --gradient-bottom: rgba(255, 92, 180, 0.03);
+    --view-btn-bg: rgba(17, 22, 31, 0.85);
+    --header-bg: rgba(10, 14, 22, 0.6);
+    --left-rail-w: 240px;
+    --right-rail-w: 320px;
+  }
+
+  body.light-mode {
+    --bg: #f6f5ef;
+    --bg-panel: #ffffff;
+    --bg-elevated: #fafaf6;
+    --border: #dcdfe5;
+    --border-bright: #b8bec8;
+    --text: #1a1f2a;
+    --text-dim: #4a5568;
+    --text-faint: #6b7383;
+    --accent: #0e8db5;
+    --accent-dim: #5fc0d8;
+    --warm: #c46a2a;
+    --magenta: #b8388e;
+    --yellow: #b8901a;
+    --green: #4a8a3a;
+    --shadow-glow: 0 0 24px rgba(14, 141, 181, 0.10);
+    --gradient-top: rgba(14, 141, 181, 0.06);
+    --gradient-bottom: rgba(184, 56, 142, 0.04);
+    --view-btn-bg: rgba(255, 255, 255, 0.85);
+    --header-bg: rgba(255, 255, 255, 0.7);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-weight: 300;
+    height: 100%;
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body {
+    background:
+      radial-gradient(ellipse at top, var(--gradient-top) 0%, transparent 50%),
+      radial-gradient(ellipse at bottom right, var(--gradient-bottom) 0%, transparent 50%),
+      var(--bg);
+    transition: background-color 0.3s ease;
+  }
+
+  #app {
+    display: grid;
+    grid-template-rows: auto 1fr;
+    /* dvh, not vh — iOS Safari's URL bar shrinks the visible viewport,
+       and 100vh would push the bottom of the layout under the chrome. */
+    height: 100dvh;
+  }
+
+  header {
+    display: flex;
+    align-items: baseline;
+    gap: 24px;
+    padding: 14px 28px;
+    border-bottom: 1px solid var(--border);
+    background: var(--header-bg);
+    backdrop-filter: blur(8px);
+  }
+
+  h1 {
+    font-family: 'Fraunces', serif;
+    font-weight: 400;
+    font-size: 20px;
+    letter-spacing: -0.01em;
+  }
+
+  h1 .accent {
+    color: var(--accent);
+    font-style: italic;
+    font-weight: 300;
+  }
+
+  .tagline {
+    font-size: 12px;
+    color: var(--text-dim);
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 0.02em;
+  }
+
+  .theme-toggle {
+    margin-left: auto;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-dim);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.05em;
+    padding: 6px 12px;
+    cursor: pointer;
+    transition: all 0.15s;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .theme-toggle:hover {
+    color: var(--text);
+    border-color: var(--border-bright);
+  }
+  .theme-toggle .icon { font-size: 13px; line-height: 1; }
+
+  main {
+    display: grid;
+    grid-template-columns: var(--left-rail-w) 4px 1fr 4px var(--right-rail-w);
+    grid-template-rows: minmax(0, 1fr);
+    grid-template-areas: "left lhandle scene rhandle right";
+    overflow: hidden;
+    min-height: 0;
+  }
+  .left-rail   { grid-area: left;  }
+  #scene-area  { grid-area: scene; }
+  .right-rail  { grid-area: right; }
+  .resize-handle {
+    background: transparent;
+    cursor: col-resize;
+    position: relative;
+    transition: background 0.15s;
+  }
+  .resize-handle:hover,
+  .resize-handle.dragging {
+    background: var(--border-bright);
+  }
+  .resize-handle.left  { grid-area: lhandle; }
+  .resize-handle.right { grid-area: rhandle; }
+
+  #scene-area {
+    position: relative;
+    background:
+      radial-gradient(circle at center, rgba(77, 212, 255, 0.04) 0%, transparent 60%),
+      var(--bg);
+    overflow: hidden;
+  }
+
+  #canvas-container {
+    width: 100%;
+    height: 100%;
+  }
+
+  /* corner markings on the scene area */
+  .corner {
+    position: absolute;
+    width: 20px;
+    height: 20px;
+    border-color: var(--border-bright);
+    pointer-events: none;
+  }
+  .corner.tl { top: 16px; left: 16px; border-top: 1px solid; border-left: 1px solid; }
+  .corner.tr { top: 16px; right: 16px; border-top: 1px solid; border-right: 1px solid; }
+  .corner.bl { bottom: 16px; left: 16px; border-bottom: 1px solid; border-left: 1px solid; }
+  .corner.br { bottom: 16px; right: 16px; border-bottom: 1px solid; border-right: 1px solid; }
+
+  .scene-label {
+    position: absolute;
+    top: 24px;
+    left: 32px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--text-faint);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    pointer-events: none;
+  }
+
+  .scene-hint {
+    position: absolute;
+    bottom: 24px;
+    left: 32px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--text-faint);
+    letter-spacing: 0.05em;
+    pointer-events: none;
+  }
+
+  /* View controls (floating buttons over scene) */
+  .view-controls {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    z-index: 10;
+  }
+
+  .view-btn {
+    background: var(--view-btn-bg);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    border: 1px solid var(--border-bright);
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    padding: 9px 12px;
+    cursor: pointer;
+    border-radius: 3px;
+    transition: all 0.15s;
+    min-width: 110px;
+    text-align: center;
+  }
+
+  .view-btn:hover, .view-btn:active {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .view-btn.icon {
+    min-width: auto;
+    padding: 8px 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .view-btn svg { width: 12px; height: 12px; }
+
+  /* Side rails */
+  .left-rail, .right-rail {
+    background: var(--bg-panel);
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .left-rail {
+    border-right: 1px solid var(--border);
+    padding: 18px 14px;
+    gap: 14px;
+  }
+  .right-rail {
+    border-left: 1px solid var(--border);
+    padding: 22px 16px;
+    gap: 18px;
+  }
+
+  .left-rail::-webkit-scrollbar,
+  .right-rail::-webkit-scrollbar { width: 6px; }
+  .left-rail::-webkit-scrollbar-track,
+  .right-rail::-webkit-scrollbar-track { background: transparent; }
+  .left-rail::-webkit-scrollbar-thumb,
+  .right-rail::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 3px; }
+
+  /* Mobile-only: hidden on desktop */
+  .tab-bar,
+  .tab-body { display: none; }
+
+  /* Panels start as direct children of <main> for HTML simplicity, then
+     applyLayout reparents them into the rails/tabs at module load.
+     Hide direct-child panels so they don't flash before reparenting. */
+  main > .panel,
+  main > .util-row { display: none; }
+
+  .panel {
+    border: 1px solid var(--border);
+    background: var(--bg-elevated);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .panel-header {
+    padding: 10px 14px;
+    background: rgba(255,255,255,0.02);
+    border-bottom: 1px solid var(--border);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .panel-header .meta {
+    color: var(--text-faint);
+    font-size: 9px;
+  }
+
+  .panel-header .header-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .panel-header .header-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text-faint);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.05em;
+    padding: 2px 6px;
+    cursor: pointer;
+    border-radius: 2px;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .panel-header .header-btn:hover {
+    color: var(--text);
+    border-color: var(--border-bright);
+  }
+
+  .panel-controls {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+  }
+  .panel-controls button {
+    appearance: none;
+    -webkit-appearance: none;
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    -webkit-text-fill-color: currentColor;
+    cursor: pointer;
+    padding: 2px 6px;
+    font-size: 11px;
+    line-height: 1;
+    transition: color 0.15s;
+  }
+  .panel-controls button:hover:not(:disabled) { color: var(--text); }
+  /* Disabled = same color, dimmed. Stays visible enough to read as
+     "this arrow is here, just inactive". (-webkit-appearance: none above
+     keeps iOS Safari from applying its own disabled tint over this.) */
+  .panel-controls button:disabled { opacity: 0.5; cursor: default; }
+
+  .panel.collapsed .panel-body { display: none; }
+  .panel.collapsed .panel-header { border-bottom: none; }
+
+  .panel-body {
+    padding: 14px;
+  }
+
+  /* State display */
+  .state-line {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    line-height: 1.7;
+    color: var(--text);
+  }
+  .state-line .label { color: var(--text-faint); margin-right: 6px; }
+  .state-line .ket { color: var(--accent); }
+  .state-line .complex { color: var(--warm); }
+
+  .coords-grid {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 4px 14px;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px dashed var(--border);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+  }
+  .coords-grid .k { color: var(--text-faint); }
+  .coords-grid .v { color: var(--text-dim); }
+
+  /* Gate buttons */
+  .gate-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+  }
+
+  .gate-btn {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-bright);
+    color: var(--text);
+    padding: 12px 8px;
+    cursor: pointer;
+    font-family: 'Fraunces', serif;
+    font-size: 17px;
+    font-weight: 400;
+    transition: all 0.12s ease;
+    border-radius: 3px;
+    position: relative;
+    text-align: center;
+    line-height: 1;
+  }
+
+  .gate-btn .sub {
+    font-size: 9px;
+    color: var(--text-faint);
+    font-family: 'JetBrains Mono', monospace;
+    display: block;
+    margin-top: 4px;
+    font-weight: 400;
+  }
+
+  .gate-btn:hover {
+    border-color: var(--accent);
+    background: rgba(77, 212, 255, 0.06);
+    transform: translateY(-1px);
+  }
+  .gate-btn:active { transform: translateY(0); }
+
+  .gate-btn.dagger { color: var(--magenta); }
+
+  /* Rotation gate sliders */
+  .rotation-gate {
+    margin-top: 10px;
+    padding: 10px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+  }
+
+  .rotation-row {
+    display: grid;
+    grid-template-columns: 36px 1fr 60px;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 6px;
+  }
+  .rotation-row:last-child { margin-bottom: 0; }
+
+  .rotation-label {
+    font-family: 'Fraunces', serif;
+    font-style: italic;
+    font-size: 14px;
+  }
+
+  .rotation-row input[type="range"] {
+    -webkit-appearance: none;
+    background: var(--border);
+    height: 2px;
+    border-radius: 1px;
+  }
+  .rotation-row input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 12px;
+    height: 12px;
+    background: var(--accent);
+    border-radius: 50%;
+    cursor: pointer;
+  }
+  .rotation-row input[type="range"]::-moz-range-thumb {
+    width: 12px;
+    height: 12px;
+    background: var(--accent);
+    border-radius: 50%;
+    cursor: pointer;
+    border: none;
+  }
+
+  .angle-val {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--text-dim);
+    text-align: right;
+  }
+
+  /* Preset states */
+  .preset-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 4px;
+  }
+
+  .preset-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    padding: 8px 4px;
+    cursor: pointer;
+    font-family: 'Fraunces', serif;
+    font-size: 14px;
+    border-radius: 3px;
+    transition: all 0.12s;
+  }
+  .preset-btn:hover {
+    color: var(--text);
+    border-color: var(--border-bright);
+  }
+
+  /* Explanation panel */
+  .explain {
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--text-dim);
+  }
+  .explain strong { color: var(--text); font-weight: 500; }
+  .explain .gate-name {
+    font-family: 'Fraunces', serif;
+    font-style: italic;
+    color: var(--accent);
+    font-size: 14px;
+  }
+  .explain code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    background: var(--bg);
+    padding: 1px 5px;
+    border-radius: 2px;
+    color: var(--warm);
+  }
+
+  /* History */
+  .history {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--text-dim);
+    max-height: 80px;
+    overflow-y: auto;
+    line-height: 1.6;
+  }
+  .history::-webkit-scrollbar { width: 4px; }
+  .history::-webkit-scrollbar-thumb { background: var(--border-bright); }
+
+  .history-empty { color: var(--text-faint); font-style: italic; }
+
+  /* Reset and utility row */
+  .util-row {
+    display: flex;
+    gap: 6px;
+  }
+  .util-btn {
+    flex: 1;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    padding: 8px;
+    cursor: pointer;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.05em;
+    border-radius: 3px;
+    transition: all 0.12s;
+  }
+  .util-btn:hover { color: var(--text); border-color: var(--border-bright); }
+
+  /* Disable interactions during animation */
+  body.animating .gate-btn,
+  body.animating .preset-btn,
+  body.animating .util-btn {
+    pointer-events: none; opacity: 0.6;
+  }
+
+  /* ============================================================
+     RESPONSIVE — TABLET & PHONE (tabbed bottom-sheet at <1024px)
+     ============================================================ */
+  @media (max-width: 1023px) {
+    main {
+      grid-template-columns: 1fr;
+      grid-template-rows: 50dvh auto minmax(0, 1fr);
+      grid-template-areas:
+        "scene"
+        "tabs"
+        "tabbody";
+    }
+    .left-rail, .right-rail, .resize-handle { display: none; }
+
+    .tab-bar {
+      grid-area: tabs;
+      display: flex;
+      border-top: 1px solid var(--border);
+      background: var(--bg-panel);
+    }
+    .tab-bar button {
+      flex: 1;
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      color: var(--text-dim);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      padding: 12px 8px;
+      cursor: pointer;
+      transition: color 0.15s, border-color 0.15s;
+    }
+    .tab-bar button.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+    }
+    .tab-bar button:not(.active):hover { color: var(--text); }
+
+    .tab-body {
+      grid-area: tabbody;
+      display: block;
+      overflow-y: auto;
+      background: var(--bg);
+      min-height: 0;
+    }
+    .tab-body::-webkit-scrollbar { width: 6px; }
+    .tab-body::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 3px; }
+
+    .tab-pane {
+      display: none;
+      padding: 14px;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .tab-pane.active { display: flex; }
+
+    .tab-pane .util-row { display: flex; }
+
+    header { padding: 12px 18px; gap: 14px; }
+    h1 { font-size: 17px; }
+    .tagline { display: none; }
+  }
+
+  @media (max-width: 600px) {
+    header {
+      padding: 10px 14px;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    h1 { font-size: 16px; }
+
+    main {
+      grid-template-rows: 44dvh auto minmax(0, 1fr);
+    }
+
+    .corner { display: none; }
+    .scene-label { top: 14px; left: 16px; font-size: 9px; }
+    .scene-hint { bottom: 14px; left: 16px; font-size: 9px; }
+
+    .view-controls {
+      top: 10px;
+      right: 10px;
+    }
+    .view-btn {
+      font-size: 9px;
+      padding: 8px 10px;
+      min-width: 90px;
+    }
+
+    .tab-pane { padding: 12px; gap: 12px; }
+    .panel-header { padding: 9px 12px; font-size: 9px; }
+    .panel-body { padding: 12px; }
+
+    .gate-grid { gap: 5px; }
+    .gate-btn {
+      padding: 14px 4px;
+      font-size: 16px;
+      min-height: 48px;
+    }
+    .gate-btn .sub { font-size: 8px; margin-top: 3px; }
+
+    .preset-btn {
+      padding: 12px 4px;
+      font-size: 13px;
+      min-height: 42px;
+    }
+
+    .util-btn {
+      padding: 12px 6px;
+      min-height: 42px;
+    }
+
+    .rotation-row {
+      grid-template-columns: 30px 1fr 56px;
+      gap: 8px;
+    }
+
+    .state-line { font-size: 12px; }
+    .coords-grid { font-size: 10px; gap: 3px 12px; }
+
+    .explain { font-size: 11px; }
+
+    .history { font-size: 10px; max-height: 100px; }
+  }
+
+  /* Very small phones (e.g. iPhone SE) */
+  @media (max-width: 380px) {
+    header { padding: 8px 12px; }
+    h1 { font-size: 15px; }
+    .view-btn { min-width: 76px; font-size: 9px; padding: 7px 8px; }
+    .gate-btn { padding: 12px 2px; font-size: 15px; }
+    .gate-btn .sub { display: none; }
+    .tab-bar button { padding: 10px 4px; font-size: 10px; letter-spacing: 0.08em; }
+  }
+
+  /* Touch-action hints to prevent default browser gestures on the canvas */
+  #canvas-container { touch-action: none; }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <header>
+    <h1>Bloch <span class="accent">sphere</span></h1>
+    <span class="tagline">// quantum gate tutorial · drag to rotate · click gates to apply</span>
+    <button id="theme-toggle" class="theme-toggle" title="Toggle light/dark theme">
+      <span class="icon" id="theme-icon">☾</span>
+    </button>
+  </header>
+
+  <main>
+    <div class="left-rail" id="left-rail"></div>
+    <div class="resize-handle left" id="resize-left"></div>
+
+    <div id="scene-area">
+      <div class="corner tl"></div>
+      <div class="corner tr"></div>
+      <div class="corner bl"></div>
+      <div class="corner br"></div>
+      <div class="scene-label">STATE · |ψ⟩</div>
+      <div class="scene-hint">drag · pinch to zoom</div>
+      <div class="view-controls">
+        <button class="view-btn" id="reset-view-btn" title="Reset to standard orientation">RESET VIEW</button>
+      </div>
+      <div id="canvas-container"></div>
+    </div>
+
+    <div class="resize-handle right" id="resize-right"></div>
+    <div class="right-rail" id="right-rail"></div>
+
+    <!-- Panels (assigned to rails / mobile tabs by applyLayout) -->
+    <div class="panel" id="state-panel">
+      <div class="panel-header">
+        <span>Current state</span>
+        <span class="header-right">
+          <span class="meta" id="purity-meta">pure</span>
+        </span>
+      </div>
+      <div class="panel-body">
+        <div class="state-line" id="state-ket"></div>
+        <div class="coords-grid" id="coords-grid"></div>
+      </div>
+    </div>
+
+    <div class="panel" id="explain-panel">
+      <div class="panel-header">
+        <span>What just happened</span>
+        <span class="header-right"></span>
+      </div>
+      <div class="panel-body">
+        <div class="explain" id="explain">
+          <strong>Welcome.</strong> The arrow is your qubit's state on the Bloch sphere.
+          North pole is <code>|0⟩</code>, south pole is <code>|1⟩</code>. Click a gate
+          to see how it rotates the state.
+        </div>
+      </div>
+    </div>
+
+    <div class="panel" id="rotations-panel">
+      <div class="panel-header">
+        <span>Rotations</span>
+        <span class="header-right"></span>
+      </div>
+      <div class="panel-body">
+        <div class="rotation-gate">
+          <div class="rotation-row">
+            <span class="rotation-label">R<sub>x</sub></span>
+            <input type="range" id="rx-slider" min="-180" max="180" value="0" step="5">
+            <span class="angle-val" id="rx-val">0</span>
+          </div>
+          <div class="rotation-row">
+            <span class="rotation-label">R<sub>y</sub></span>
+            <input type="range" id="ry-slider" min="-180" max="180" value="0" step="5">
+            <span class="angle-val" id="ry-val">0</span>
+          </div>
+          <div class="rotation-row">
+            <span class="rotation-label">R<sub>z</sub></span>
+            <input type="range" id="rz-slider" min="-180" max="180" value="0" step="5">
+            <span class="angle-val" id="rz-val">0</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel" id="history-panel">
+      <div class="panel-header">
+        <span>Gate sequence</span>
+        <span class="header-right">
+          <span class="meta" id="gate-count">0 gates</span>
+          <button class="header-btn" id="clear-history" title="Clear gate log">clear</button>
+        </span>
+      </div>
+      <div class="panel-body">
+        <div class="history" id="history"><span class="history-empty">no gates applied yet</span></div>
+      </div>
+    </div>
+
+    <div class="panel" id="presets-panel">
+      <div class="panel-header">
+        <span>Reset to state</span>
+        <span class="header-right"></span>
+      </div>
+      <div class="panel-body">
+        <div class="preset-grid" id="preset-grid"></div>
+      </div>
+    </div>
+
+    <div class="panel" id="gates-panel">
+      <div class="panel-header">
+        <span>Single-qubit gates</span>
+        <span class="header-right"><span class="meta">click to apply</span></span>
+      </div>
+      <div class="panel-body">
+        <div class="gate-grid">
+          <button class="gate-btn" data-gate="H">H<span class="sub">Hadamard</span></button>
+          <button class="gate-btn" data-gate="X">X<span class="sub">π · x̂</span></button>
+          <button class="gate-btn" data-gate="Y">Y<span class="sub">π · ŷ</span></button>
+          <button class="gate-btn" data-gate="Z">Z<span class="sub">π · ẑ</span></button>
+          <button class="gate-btn" data-gate="S">S<span class="sub">π/2 · ẑ</span></button>
+          <button class="gate-btn dagger" data-gate="Sdg">S†<span class="sub">−π/2 · ẑ</span></button>
+          <button class="gate-btn" data-gate="T">T<span class="sub">π/4 · ẑ</span></button>
+          <button class="gate-btn dagger" data-gate="Tdg">T†<span class="sub">−π/4 · ẑ</span></button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Mobile-only: shown at <1024px -->
+    <nav class="tab-bar">
+      <button data-tab="gates" class="active">GATES</button>
+      <button data-tab="state">STATE</button>
+      <button data-tab="more">MORE</button>
+    </nav>
+    <div class="tab-body">
+      <section class="tab-pane active" data-tab="gates" id="tab-gates"></section>
+      <section class="tab-pane" data-tab="state" id="tab-state"></section>
+      <section class="tab-pane" data-tab="more" id="tab-more"></section>
+    </div>
+  </main>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { Line2 } from 'three/addons/lines/Line2.js';
+import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
+import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
+
+// ============================================================
+// QUANTUM STATE MATH
+// ============================================================
+// A complex number is just [re, im]
+const C = (re, im = 0) => ({ re, im });
+const cAdd = (a, b) => C(a.re + b.re, a.im + b.im);
+const cMul = (a, b) => C(a.re * b.re - a.im * b.im, a.re * b.im + a.im * b.re);
+const cConj = (a) => C(a.re, -a.im);
+const cAbs2 = (a) => a.re * a.re + a.im * a.im;
+
+// Apply a 2x2 unitary [[a,b],[c,d]] to single-qubit state
+function applyU1(U, state) {
+  const [a, b] = state;
+  return [
+    cAdd(cMul(U[0][0], a), cMul(U[0][1], b)),
+    cAdd(cMul(U[1][0], a), cMul(U[1][1], b))
+  ];
+}
+
+// Bloch coords from single-qubit state
+function blochOf(state) {
+  const [a, b] = state;
+  // x = 2 Re(a* b), y = 2 Im(a* b), z = |a|^2 - |b|^2
+  const ac = cConj(a);
+  const acb = cMul(ac, b);
+  return {
+    x: 2 * acb.re,
+    y: 2 * acb.im,
+    z: cAbs2(a) - cAbs2(b)
+  };
+}
+
+// ============================================================
+// GATES
+// ============================================================
+const SQRT12 = 1 / Math.sqrt(2);
+const GATES = {
+  I:  [[C(1), C(0)], [C(0), C(1)]],
+  X:  [[C(0), C(1)], [C(1), C(0)]],
+  Y:  [[C(0), C(0,-1)], [C(0,1), C(0)]],
+  Z:  [[C(1), C(0)], [C(0), C(-1)]],
+  H:  [[C(SQRT12), C(SQRT12)], [C(SQRT12), C(-SQRT12)]],
+  S:  [[C(1), C(0)], [C(0), C(0,1)]],
+  Sdg:[[C(1), C(0)], [C(0), C(0,-1)]],
+  T:  [[C(1), C(0)], [C(0), C(SQRT12, SQRT12)]],
+  Tdg:[[C(1), C(0)], [C(0), C(SQRT12, -SQRT12)]],
+};
+
+function gateRx(theta) {
+  const c = Math.cos(theta/2), s = Math.sin(theta/2);
+  return [[C(c), C(0,-s)], [C(0,-s), C(c)]];
+}
+function gateRy(theta) {
+  const c = Math.cos(theta/2), s = Math.sin(theta/2);
+  return [[C(c), C(-s)], [C(s), C(c)]];
+}
+function gateRz(theta) {
+  const c = Math.cos(theta/2), s = Math.sin(theta/2);
+  return [[C(c,-s), C(0)], [C(0), C(c,s)]];
+}
+
+// Bloch-sphere axis & angle that this gate rotates around
+function gateRotation(name, params={}) {
+  switch(name) {
+    case 'X': return { axis: new THREE.Vector3(1,0,0), angle: Math.PI };
+    case 'Y': return { axis: new THREE.Vector3(0,1,0), angle: Math.PI };
+    case 'Z': return { axis: new THREE.Vector3(0,0,1), angle: Math.PI };
+    case 'H': return { axis: new THREE.Vector3(1,0,1).normalize(), angle: Math.PI };
+    case 'S': return { axis: new THREE.Vector3(0,0,1), angle: Math.PI/2 };
+    case 'Sdg': return { axis: new THREE.Vector3(0,0,1), angle: -Math.PI/2 };
+    case 'T': return { axis: new THREE.Vector3(0,0,1), angle: Math.PI/4 };
+    case 'Tdg': return { axis: new THREE.Vector3(0,0,1), angle: -Math.PI/4 };
+    case 'Rx': return { axis: new THREE.Vector3(1,0,0), angle: params.theta };
+    case 'Ry': return { axis: new THREE.Vector3(0,1,0), angle: params.theta };
+    case 'Rz': return { axis: new THREE.Vector3(0,0,1), angle: params.theta };
+  }
+  return null;
+}
+
+const GATE_DESC = {
+  H: `<span class="gate-name">Hadamard</span> creates equal superposition. Geometrically it's a π rotation around the diagonal <code>(x̂+ẑ)/√2</code> axis. It maps <code>|0⟩ → |+⟩</code> and <code>|+⟩ → |0⟩</code>. The workhorse of quantum algorithms — anywhere you see "put the qubit in superposition," it's H.`,
+  X: `<span class="gate-name">Pauli-X</span> is the quantum NOT. A π rotation around <code>x̂</code>. It flips <code>|0⟩ ↔ |1⟩</code> but leaves <code>|+⟩</code> and <code>|-⟩</code> alone (they sit on the rotation axis).`,
+  Y: `<span class="gate-name">Pauli-Y</span> is a π rotation around <code>ŷ</code>. It flips <code>|0⟩ ↔ |1⟩</code> with an extra phase, and leaves <code>|+i⟩</code>/<code>|-i⟩</code> on the axis fixed.`,
+  Z: `<span class="gate-name">Pauli-Z</span> is a π rotation around <code>ẑ</code>. It does nothing to <code>|0⟩</code> or <code>|1⟩</code> (they're on the axis), but flips the phase between them — turns <code>|+⟩</code> into <code>|-⟩</code>.`,
+  S: `<span class="gate-name">S gate</span> (a.k.a. phase gate, √Z) is a π/2 rotation around <code>ẑ</code>. Watch: applying S twice gives Z.`,
+  Sdg: `<span class="gate-name">S†</span> is the inverse of S — a −π/2 rotation around <code>ẑ</code>.`,
+  T: `<span class="gate-name">T gate</span> (π/8 gate, fourth root of Z) is a π/4 rotation around <code>ẑ</code>. Together with H and CNOT (a two-qubit gate, not shown here), it forms a universal gate set.`,
+  Tdg: `<span class="gate-name">T†</span> is the inverse of T — a −π/4 rotation around <code>ẑ</code>.`,
+  Rx: (theta) => `<span class="gate-name">R<sub>x</sub>(${formatAngle(theta)})</span> rotates the state by ${formatAngle(theta)} around the <code>x̂</code> axis. Continuous version of X.`,
+  Ry: (theta) => `<span class="gate-name">R<sub>y</sub>(${formatAngle(theta)})</span> rotates by ${formatAngle(theta)} around <code>ŷ</code>. The only way to move the state without involving complex phases.`,
+  Rz: (theta) => `<span class="gate-name">R<sub>z</sub>(${formatAngle(theta)})</span> rotates by ${formatAngle(theta)} around <code>ẑ</code>. Pure phase rotation — invisible if you start at <code>|0⟩</code> or <code>|1⟩</code>.`,
+};
+
+function formatAngle(theta) {
+  // express in pi units if close
+  const r = theta / Math.PI;
+  if (Math.abs(r) < 0.01) return '0';
+  const fracs = [[1,1],[1,2],[1,3],[1,4],[1,6],[1,8],[2,3],[3,4],[3,2]];
+  for (const [n,d] of fracs) {
+    const target = n/d;
+    if (Math.abs(Math.abs(r) - target) < 0.01) {
+      const sign = r < 0 ? '−' : '';
+      const num = n === 1 ? '' : n;
+      return d === 1 ? `${sign}${num}π` : `${sign}${num}π/${d}`;
+    }
+  }
+  return `${(theta * 180 / Math.PI).toFixed(0)}°`;
+}
+
+// ============================================================
+// THREE.JS SCENE
+// ============================================================
+const container = document.getElementById('canvas-container');
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
+// Use Z-up convention so |0⟩ (at +z) appears at the top of the screen
+camera.up.set(0, 0, 1);
+// Standard convention: X on screen-left, Y on screen-right, Z on top.
+// Camera in (+X, +Y, +Z) octant gives cam-right ≈ (-0.71, +0.71, 0),
+// so world +X projects to screen-left and +Y to screen-right.
+camera.position.set(2.5, 2.5, 1.5);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setPixelRatio(window.devicePixelRatio);
+container.appendChild(renderer.domElement);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.enablePan = false;
+controls.minDistance = 2.2;
+controls.maxDistance = 10;
+// Touch gestures for mobile: one finger rotate, two finger zoom
+controls.touches = {
+  ONE: THREE.TOUCH.ROTATE,
+  TWO: THREE.TOUCH.DOLLY_PAN
+};
+
+// Lighting
+scene.add(new THREE.AmbientLight(0xffffff, 0.45));
+const keyLight = new THREE.DirectionalLight(0x88c0ff, 0.7);
+keyLight.position.set(2, 3, 2);
+scene.add(keyLight);
+const rimLight = new THREE.DirectionalLight(0xff9d5c, 0.25);
+rimLight.position.set(-3, -1, -2);
+scene.add(rimLight);
+
+// Shared resolution Vector2 that all Line2 materials reference; resize() mutates it.
+const lineResolution = new THREE.Vector2(1024, 768);
+
+function renderTextToTexture(text, color) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 128; canvas.height = 64;
+  const ctx = canvas.getContext('2d');
+  ctx.font = '500 28px "JetBrains Mono", monospace';
+  ctx.fillStyle = color;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, 64, 32);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.minFilter = THREE.LinearFilter;
+  return tex;
+}
+
+function makeBlochSphere() {
+  const group = new THREE.Group();
+
+  // SphereGeometry's poles default to local ±Y; rotate so the wireframe
+  // converges at world ±Z, matching the |0⟩/|1⟩ kets on the Bloch sphere.
+  const sphereGeom = new THREE.SphereGeometry(1, 48, 32);
+  sphereGeom.rotateX(Math.PI / 2);
+  const wireMat = new THREE.MeshBasicMaterial({
+    color: 0x2a3445, wireframe: true, transparent: true, opacity: 0.35
+  });
+  const wireSphere = new THREE.Mesh(sphereGeom, wireMat);
+  group.add(wireSphere);
+
+  // Translucent fill
+  const fillMat = new THREE.MeshPhongMaterial({
+    color: 0x4dd4ff, transparent: true, opacity: 0.04, depthWrite: false
+  });
+  group.add(new THREE.Mesh(sphereGeom, fillMat));
+
+  // Equator (XY)
+  const equatorGeom = new THREE.RingGeometry(0.998, 1.002, 96);
+  const equatorMat = new THREE.MeshBasicMaterial({
+    color: 0x4dd4ff, transparent: true, opacity: 0.4, side: THREE.DoubleSide
+  });
+  const equator = new THREE.Mesh(equatorGeom, equatorMat);
+  equator.rotation.x = Math.PI / 2;
+  group.add(equator);
+
+  // X-axis great circle (XZ plane)
+  const xCircleMat = new THREE.MeshBasicMaterial({
+    color: 0x5a6478, transparent: true, opacity: 0.25, side: THREE.DoubleSide
+  });
+  const xCircle = new THREE.Mesh(equatorGeom, xCircleMat);
+  xCircle.rotation.y = Math.PI / 2;
+  group.add(xCircle);
+
+  // Y-axis great circle (YZ plane)
+  const yCircleMat = new THREE.MeshBasicMaterial({
+    color: 0x5a6478, transparent: true, opacity: 0.25, side: THREE.DoubleSide
+  });
+  const yCircle = new THREE.Mesh(equatorGeom, yCircleMat);
+  group.add(yCircle);
+
+  // Axes
+  const axisLen = 1.35;
+  function axis(dir, color) {
+    const points = [
+      new THREE.Vector3(0,0,0).addScaledVector(dir, -axisLen),
+      new THREE.Vector3(0,0,0).addScaledVector(dir, axisLen)
+    ];
+    const geo = new THREE.BufferGeometry().setFromPoints(points);
+    return new THREE.Line(geo, new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.5 }));
+  }
+  group.add(axis(new THREE.Vector3(1,0,0), 0x8ee07a)); // x — green
+  group.add(axis(new THREE.Vector3(0,1,0), 0xff9d5c)); // y — orange
+  group.add(axis(new THREE.Vector3(0,0,1), 0xff5cb4)); // z — magenta
+
+  function makeLabel(text, color) {
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: renderTextToTexture(text, color),
+      transparent: true, depthWrite: false, depthTest: false,
+    }));
+    sprite.scale.set(0.5, 0.25, 1);
+    return sprite;
+  }
+  const themedLabels = [];
+  function placeLabel(text, role, pos) {
+    const s = makeLabel(text, '#ffffff');
+    s.position.copy(pos);
+    s.userData.text = text;
+    group.add(s);
+    themedLabels.push({ sprite: s, role });
+    return s;
+  }
+  placeLabel('|0⟩', 'pole', new THREE.Vector3(0, 0, 1.25));
+  placeLabel('|1⟩', 'pole', new THREE.Vector3(0, 0, -1.25));
+  placeLabel('|+⟩', 'plus', new THREE.Vector3(1.25, 0, 0));
+  placeLabel('|−⟩',  'plus', new THREE.Vector3(-1.25, 0, 0));
+  placeLabel('|+i⟩', 'iket', new THREE.Vector3(0, 1.25, 0));
+  placeLabel('|−i⟩', 'iket', new THREE.Vector3(0, -1.25, 0));
+
+  // Axis labels (small, color-matched to axis lines) — sit just past the ket labels.
+  // x̂ green = |+⟩↔|−⟩ axis, ŷ orange = |+i⟩↔|−i⟩ axis, ẑ magenta = |0⟩↔|1⟩ axis
+  function placeAxisLabel(text, role, dir) {
+    const s = makeLabel(text, '#ffffff');
+    s.scale.set(0.32, 0.16, 1);
+    s.position.copy(dir).multiplyScalar(1.40);
+    s.userData.text = text;
+    group.add(s);
+    themedLabels.push({ sprite: s, role });
+    return s;
+  }
+  placeAxisLabel('x\u0302', 'plus', new THREE.Vector3(1, 0, 0));
+  placeAxisLabel('y\u0302', 'iket', new THREE.Vector3(0, 1, 0));
+  placeAxisLabel('z\u0302', 'zhat', new THREE.Vector3(0, 0, 1));
+
+  // Bloch vector arrow — cylinder shaft + cone head so width is real geometry
+  // (a thin Line shaft is barely visible, especially in light mode).
+  const arrowGroup = new THREE.Group();
+  const shaftGeom = new THREE.CylinderGeometry(0.022, 0.022, 1, 16);
+  shaftGeom.translate(0, 0.5, 0);
+  const arrowShaftMat = new THREE.MeshBasicMaterial({ color: 0x4dd4ff });
+  const arrowShaft = new THREE.Mesh(shaftGeom, arrowShaftMat);
+  arrowGroup.add(arrowShaft);
+  const headGeom = new THREE.ConeGeometry(0.085, 0.20, 18);
+  const arrowHeadMat = new THREE.MeshBasicMaterial({ color: 0x4dd4ff });
+  const arrowHead = new THREE.Mesh(headGeom, arrowHeadMat);
+  arrowGroup.add(arrowHead);
+  group.add(arrowGroup);
+  const arrow = { group: arrowGroup, shaft: arrowShaft, head: arrowHead, shaftMat: arrowShaftMat, headMat: arrowHeadMat };
+
+  // Rotation axis indicator — Line2 for pixel-width control (linewidth on
+  // basic Line is ignored on most platforms).
+  const rotAxisGeom = new LineGeometry();
+  rotAxisGeom.setPositions([0, 0, -1.45, 0, 0, 1.45]);
+  const rotAxisMat = new LineMaterial({
+    color: 0xf5d76e, linewidth: 5, transparent: true, opacity: 0,
+    resolution: lineResolution,
+  });
+  const rotAxis = new Line2(rotAxisGeom, rotAxisMat);
+  rotAxis.computeLineDistances();
+  group.add(rotAxis);
+
+  // Orbit circle (dashed Line2): previews the rotation plane the state will live on.
+  const orbitN = 80;
+  const orbitGeom = new LineGeometry();
+  orbitGeom.setPositions(new Array((orbitN + 1) * 3).fill(0));
+  const orbitMat = new LineMaterial({
+    color: 0xf5d76e, linewidth: 4, transparent: true, opacity: 0,
+    dashed: true, dashSize: 0.07, gapSize: 0.045,
+    resolution: lineResolution,
+  });
+  const orbit = new Line2(orbitGeom, orbitMat);
+  group.add(orbit);
+
+  // Trail (Line2): the path the bloch vector traces. Persists until next gate.
+  const trailMax = 240;
+  const trailBuf = new Float32Array(trailMax * 3);
+  const trailGeom = new LineGeometry();
+  trailGeom.setPositions([0, 0, 0, 0, 0, 0]);
+  const trailMat = new LineMaterial({
+    color: 0x4dd4ff, linewidth: 4, transparent: true, opacity: 0.95,
+    resolution: lineResolution,
+  });
+  const trail = new Line2(trailGeom, trailMat);
+  trail.userData.count = 0;
+  trail.userData.buffer = trailBuf;
+  trail.visible = false;
+  group.add(trail);
+
+  return {
+    group, arrow, rotAxis, orbit, trail,
+    materials: { wire: wireMat, equator: equatorMat, xCircle: xCircleMat, yCircle: yCircleMat },
+    rotAxisMat, orbitMat, trailMat,
+    themedLabels,
+  };
+}
+
+function repaintLabel(sprite, color) {
+  if (sprite.material.map) sprite.material.map.dispose();
+  sprite.material.map = renderTextToTexture(sprite.userData.text, color);
+  sprite.material.needsUpdate = true;
+}
+
+const BLOCH_THEMES = {
+  dark: {
+    wire: 0x556a85, equator: 0x4dd4ff, greatCircle: 0x7a849a,
+    rotAxis: 0xf5d76e, orbit: 0xf5d76e,
+    arrowPure: 0x4dd4ff, arrowMixed: 0x5a6478, trail: 0x4dd4ff,
+    pole: '#ffffff', plus: '#8ee07a', iket: '#ff9d5c', zhat: '#ff5cb4',
+  },
+  light: {
+    wire: 0x9aa3b0, equator: 0x0e8db5, greatCircle: 0x8a92a2,
+    rotAxis: 0xc97300, orbit: 0xc97300,
+    arrowPure: 0x0072a0, arrowMixed: 0x8a92a2, trail: 0x0072a0,
+    pole: '#1a1f2a', plus: '#3d8a3a', iket: '#c46a2a', zhat: '#b8388e',
+  },
+};
+let currentBlochTheme = BLOCH_THEMES.dark;
+
+function applyBlochTheme(themeName) {
+  const t = BLOCH_THEMES[themeName];
+  currentBlochTheme = t;
+  sphere0.materials.wire.color.setHex(t.wire);
+  sphere0.materials.equator.color.setHex(t.equator);
+  sphere0.materials.xCircle.color.setHex(t.greatCircle);
+  sphere0.materials.yCircle.color.setHex(t.greatCircle);
+  sphere0.rotAxisMat.color.setHex(t.rotAxis);
+  sphere0.orbitMat.color.setHex(t.orbit);
+  sphere0.trailMat.color.setHex(t.trail);
+  for (const { sprite, role } of sphere0.themedLabels) {
+    repaintLabel(sprite, t[role]);
+  }
+  // Arrow color depends on per-state purity, recomputed in updateBlochArrow.
+  if (typeof syncBlochVisuals === 'function') syncBlochVisuals();
+}
+
+const sphere0 = makeBlochSphere();
+scene.add(sphere0.group);
+
+const _arrowYAxis = new THREE.Vector3(0, 1, 0);
+const _arrowQ = new THREE.Quaternion();
+const _arrowV = new THREE.Vector3();
+const _arrowMixed = new THREE.Color();
+const _arrowPure = new THREE.Color();
+
+function updateBlochArrow(sphere, x, y, z) {
+  const len = Math.sqrt(x*x + y*y + z*z);
+  if (len < 0.005) {
+    sphere.arrow.group.visible = false;
+    return;
+  }
+  sphere.arrow.group.visible = true;
+  _arrowV.set(x, y, z).multiplyScalar(1 / len);
+  _arrowQ.setFromUnitVectors(_arrowYAxis, _arrowV);
+  sphere.arrow.group.quaternion.copy(_arrowQ);
+
+  const headHeight = Math.min(0.20, len * 0.32);
+  const shaftLen = Math.max(0.005, len - headHeight);
+  sphere.arrow.shaft.scale.set(1, shaftLen, 1);
+  sphere.arrow.head.position.set(0, shaftLen + headHeight / 2, 0);
+  sphere.arrow.head.scale.set(1, headHeight / 0.20, 1);
+
+  const purity = Math.min(1, len);
+  _arrowMixed.setHex(currentBlochTheme.arrowMixed);
+  _arrowPure.setHex(currentBlochTheme.arrowPure);
+  _arrowMixed.lerp(_arrowPure, purity);
+  sphere.arrow.shaftMat.color.copy(_arrowMixed);
+  sphere.arrow.headMat.color.copy(_arrowMixed);
+}
+
+function showRotationAxis(sphere, axis) {
+  sphere.rotAxis.geometry.setPositions([
+    -axis.x * 1.45, -axis.y * 1.45, -axis.z * 1.45,
+     axis.x * 1.45,  axis.y * 1.45,  axis.z * 1.45,
+  ]);
+  sphere.rotAxis.computeLineDistances();
+  sphere.rotAxis.material.opacity = 0.95;
+}
+// Orbit circle: shows the plane the state will rotate in.
+// Normally the circle through the current bloch vector around the axis.
+// If the state sits exactly on the axis (rotation is a no-op), fall back
+// to the unit great-circle perpendicular to the axis as a plane indicator —
+// otherwise the orbit would silently disappear for some slider/state combos
+// (e.g. Rz from |0⟩, Rx from |+⟩).
+function showRotationOrbit(sphere, startBloch, axis) {
+  const r = new THREE.Vector3(startBloch.x, startBloch.y, startBloch.z);
+  const n = axis.clone().normalize();
+  const parallel = n.clone().multiplyScalar(r.dot(n));
+  const perp = r.clone().sub(parallel);
+  const dist = perp.length();
+
+  let center, e1, e2, radius;
+  if (dist < 0.01) {
+    radius = 1;
+    center = new THREE.Vector3(0, 0, 0);
+    const helper = Math.abs(n.x) > 0.9 ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(1, 0, 0);
+    e1 = helper.sub(n.clone().multiplyScalar(n.dot(helper))).normalize();
+    e2 = new THREE.Vector3().crossVectors(n, e1).normalize();
+  } else {
+    radius = dist;
+    center = parallel;
+    e1 = perp.clone().normalize();
+    e2 = new THREE.Vector3().crossVectors(n, e1).normalize();
+  }
+
+  const N = 80;
+  const points = [];
+  for (let i = 0; i <= N; i++) {
+    const a = (i / N) * 2 * Math.PI;
+    const c = Math.cos(a), s = Math.sin(a);
+    points.push(
+      center.x + radius * (c * e1.x + s * e2.x),
+      center.y + radius * (c * e1.y + s * e2.y),
+      center.z + radius * (c * e1.z + s * e2.z)
+    );
+  }
+  sphere.orbit.geometry.setPositions(points);
+  sphere.orbit.computeLineDistances();
+  sphere.orbit.material.opacity = 0.85;
+}
+
+function clearTrail(sphere) {
+  sphere.trail.userData.count = 0;
+  sphere.trail.visible = false;
+  sphere.trail.material.opacity = 0.95;
+}
+function addTrailPoint(sphere, x, y, z) {
+  const count = sphere.trail.userData.count;
+  if (count >= 240) return;
+  const buf = sphere.trail.userData.buffer;
+  buf[count * 3]     = x;
+  buf[count * 3 + 1] = y;
+  buf[count * 3 + 2] = z;
+  sphere.trail.userData.count = count + 1;
+  if (count + 1 >= 2) {
+    sphere.trail.visible = true;
+    sphere.trail.geometry.setPositions(buf.subarray(0, (count + 1) * 3));
+  }
+}
+
+const VIEW_PRESET = { pos: new THREE.Vector3(2.5, 2.5, 1.5), target: new THREE.Vector3(0, 0, 0) };
+
+// Smoothly fly the camera to a new position/target
+let cameraAnim = null;
+function animateCameraTo(targetPos, targetLookAt, duration = 600) {
+  if (cameraAnim) cancelAnimationFrame(cameraAnim);
+  const startPos = camera.position.clone();
+  const startTarget = controls.target.clone();
+  const startTime = performance.now();
+
+  function step(now) {
+    const t = Math.min((now - startTime) / duration, 1);
+    const eased = easeInOutCubic(t);
+    camera.position.lerpVectors(startPos, targetPos, eased);
+    controls.target.lerpVectors(startTarget, targetLookAt, eased);
+    controls.update();
+    if (t < 1) cameraAnim = requestAnimationFrame(step);
+    else cameraAnim = null;
+  }
+  cameraAnim = requestAnimationFrame(step);
+}
+
+function resetView() {
+  animateCameraTo(VIEW_PRESET.pos, VIEW_PRESET.target);
+}
+
+// ============================================================
+// APP STATE
+// ============================================================
+let state1 = [C(1), C(0)];      // |0⟩
+const sliderRads = { x: 0, y: 0, z: 0 };
+let activeAx = null;
+let gateHistory = [];
+let isAnimating = false;
+
+// ============================================================
+// RENDER
+// ============================================================
+function syncBlochVisuals() {
+  const b = blochOf(state1);
+  updateBlochArrow(sphere0, b.x, b.y, b.z);
+}
+
+const stateKetEl   = document.getElementById('state-ket');
+const coordsGridEl = document.getElementById('coords-grid');
+const purityMetaEl = document.getElementById('purity-meta');
+
+function updateStateDisplay() {
+  const [a, b] = state1;
+  stateKetEl.innerHTML =
+    `<span class="label">|ψ⟩ =</span> ${fmtComplex(a)} <span class="ket">|0⟩</span> + ${fmtComplex(b)} <span class="ket">|1⟩</span>`;
+
+  const bv = blochOf(state1);
+  const r = Math.sqrt(bv.x*bv.x + bv.y*bv.y + bv.z*bv.z);
+  const theta = Math.acos(Math.max(-1, Math.min(1, bv.z)));
+  const phi = Math.atan2(bv.y, bv.x);
+  coordsGridEl.innerHTML = `
+    <span class="k">x</span><span class="v">${bv.x.toFixed(3)}</span>
+    <span class="k">y</span><span class="v">${bv.y.toFixed(3)}</span>
+    <span class="k">z</span><span class="v">${bv.z.toFixed(3)}</span>
+    <span class="k">θ</span><span class="v">${(theta * 180 / Math.PI).toFixed(1)}°</span>
+    <span class="k">φ</span><span class="v">${(phi * 180 / Math.PI).toFixed(1)}°</span>
+    <span class="k">|r|</span><span class="v">${r.toFixed(3)} ${r > 0.999 ? '· pure' : '· mixed'}</span>
+  `;
+  purityMetaEl.textContent = r > 0.999 ? 'pure' : `mixed (|r|=${r.toFixed(2)})`;
+}
+
+function fmtComplex(c) {
+  const re = c.re, im = c.im;
+  const eps = 0.001;
+  if (Math.abs(re) < eps && Math.abs(im) < eps) return '<span class="complex">0</span>';
+  if (Math.abs(im) < eps) return `<span class="complex">${fmtNum(re)}</span>`;
+  if (Math.abs(re) < eps) return `<span class="complex">${fmtNum(im)}i</span>`;
+  const sign = im >= 0 ? '+' : '−';
+  return `<span class="complex">(${fmtNum(re)} ${sign} ${fmtNum(Math.abs(im))}i)</span>`;
+}
+function fmtNum(x) {
+  // recognize 1/√2 patterns
+  const v = Math.abs(x);
+  if (Math.abs(v - 1) < 0.001) return x < 0 ? '−1' : '1';
+  if (Math.abs(v - SQRT12) < 0.001) return (x < 0 ? '−' : '') + '1/√2';
+  if (Math.abs(v - 0.5) < 0.001) return (x < 0 ? '−' : '') + '½';
+  return x.toFixed(3);
+}
+
+// ============================================================
+// ANIMATION
+// ============================================================
+function easeInOutCubic(t) {
+  return t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2, 3)/2;
+}
+
+// Single-qubit gate animation (rotation around an axis)
+function animateSingleQubitGate(sphere, currentBloch, axis, totalAngle, finalBloch, duration = 850) {
+  return new Promise(resolve => {
+    isAnimating = true;
+    document.body.classList.add('animating');
+
+    // Wipe previous trail; show the rotation axis and predicted orbit circle
+    clearTrail(sphere);
+    showRotationAxis(sphere, axis);
+    showRotationOrbit(sphere, currentBloch, axis);
+
+    const startVec = new THREE.Vector3(currentBloch.x, currentBloch.y, currentBloch.z);
+    const startTime = performance.now();
+
+    // Seed the trail with the starting point
+    addTrailPoint(sphere, startVec.x, startVec.y, startVec.z);
+
+    function step(now) {
+      const t = Math.min((now - startTime) / duration, 1);
+      const eased = easeInOutCubic(t);
+      const angle = totalAngle * eased;
+      const v = startVec.clone().applyAxisAngle(axis, angle);
+      updateBlochArrow(sphere, v.x, v.y, v.z);
+      addTrailPoint(sphere, v.x, v.y, v.z);
+
+      if (t < 1) {
+        requestAnimationFrame(step);
+      } else {
+        // Snap to exact final position and append it
+        updateBlochArrow(sphere, finalBloch.x, finalBloch.y, finalBloch.z);
+        addTrailPoint(sphere, finalBloch.x, finalBloch.y, finalBloch.z);
+
+        // Hold the orbit + axis briefly, then fade them out.
+        // The TRAIL stays visible until the next gate is applied.
+        setTimeout(() => {
+          fadeOrbitAndAxis(sphere).then(() => {
+            isAnimating = false;
+            document.body.classList.remove('animating');
+            resolve();
+          });
+        }, 600);
+      }
+    }
+    requestAnimationFrame(step);
+  });
+}
+
+function fadeOrbitAndAxis(sphere, duration = 600) {
+  return new Promise(resolve => {
+    if (sphere.fadeHandle) cancelAnimationFrame(sphere.fadeHandle);
+    const startOrbit = sphere.orbit.material.opacity;
+    const startAxis  = sphere.rotAxis.material.opacity;
+    const startTime  = performance.now();
+    function step(now) {
+      const t = Math.min((now - startTime) / duration, 1);
+      sphere.orbit.material.opacity   = startOrbit * (1 - t);
+      sphere.rotAxis.material.opacity = startAxis  * (1 - t);
+      if (t < 1) sphere.fadeHandle = requestAnimationFrame(step);
+      else { sphere.fadeHandle = null; resolve(); }
+    }
+    sphere.fadeHandle = requestAnimationFrame(step);
+  });
+}
+
+// ============================================================
+// GATE APPLICATION
+// ============================================================
+async function applyGate(name, params = {}) {
+  if (isAnimating) return;
+
+  let U;
+  if (name === 'Rx') U = gateRx(params.theta);
+  else if (name === 'Ry') U = gateRy(params.theta);
+  else if (name === 'Rz') U = gateRz(params.theta);
+  else U = GATES[name];
+
+  const before = blochOf(state1);
+  const newState = applyU1(U, state1);
+  const after = blochOf(newState);
+  const rot = gateRotation(name, params);
+
+  await animateSingleQubitGate(sphere0, before, rot.axis, rot.angle, after);
+  state1 = newState;
+
+  inferSlidersFromState();
+  syncBlochVisuals();
+  updateStateDisplay();
+  addToHistory(name, params);
+  showExplanation(name, params);
+}
+
+function addToHistory(name, params) {
+  let label = name;
+  if (params.theta !== undefined) {
+    label = `${name}(${formatAngle(params.theta)})`;
+  }
+  gateHistory.push(label);
+  const histEl = document.getElementById('history');
+  histEl.innerHTML = gateHistory.map((g,i) => `<span style="color:var(--text-faint)">${(i+1).toString().padStart(2,'0')}</span> ${g}`).join('<br>');
+  histEl.scrollTop = histEl.scrollHeight;
+  document.getElementById('gate-count').textContent = `${gateHistory.length} gate${gateHistory.length === 1 ? '' : 's'}`;
+}
+
+function showExplanation(name, params) {
+  let html;
+  const desc = GATE_DESC[name];
+  if (typeof desc === 'function') html = desc(params.theta);
+  else html = desc;
+  document.getElementById('explain').innerHTML = html || `Applied <code>${name}</code>.`;
+}
+
+// ============================================================
+// PRESETS
+// ============================================================
+function buildPresets() {
+  const grid = document.getElementById('preset-grid');
+  // Columns by axis (Z, X, Y); rows by sign (+/−), so antipodes line up.
+  grid.innerHTML = `
+    <button class="preset-btn" data-preset="0">|0⟩</button>
+    <button class="preset-btn" data-preset="+">|+⟩</button>
+    <button class="preset-btn" data-preset="+i">|+i⟩</button>
+    <button class="preset-btn" data-preset="1">|1⟩</button>
+    <button class="preset-btn" data-preset="-">|−⟩</button>
+    <button class="preset-btn" data-preset="-i">|−i⟩</button>
+  `;
+  grid.querySelectorAll('button').forEach(b => b.addEventListener('click', () => applyPreset(b.dataset.preset)));
+}
+
+const PRESET_LABELS = {
+  '0':  '|0⟩',  '1':  '|1⟩',  '+':  '|+⟩',  '-':  '|−⟩',
+  '+i': '|+i⟩', '-i': '|−i⟩',
+};
+
+function applyPreset(p) {
+  if (isAnimating) return;
+  switch(p) {
+    case '0':  state1 = [C(1), C(0)]; break;
+    case '1':  state1 = [C(0), C(1)]; break;
+    case '+':  state1 = [C(SQRT12), C(SQRT12)]; break;
+    case '-':  state1 = [C(SQRT12), C(-SQRT12)]; break;
+    case '+i': state1 = [C(SQRT12), C(0, SQRT12)]; break;
+    case '-i': state1 = [C(SQRT12), C(0, -SQRT12)]; break;
+  }
+  inferSlidersFromState();
+  syncBlochVisuals();
+  updateStateDisplay();
+  clearTrail(sphere0);
+  const label = PRESET_LABELS[p] || 'preset state';
+  document.getElementById('explain').innerHTML = `<strong>State set to ${label}.</strong>`;
+}
+
+// ============================================================
+// EVENTS
+// ============================================================
+document.querySelectorAll('.gate-btn').forEach(btn => {
+  btn.addEventListener('click', () => applyGate(btn.dataset.gate));
+});
+
+// Sliders display the Euler decomposition of current state. Slider drag
+// applies a delta rotation R_axis(Δ) directly to the current state; release
+// re-infers (so on-axis rotations snap back, off-axis rotations persist).
+const ROTATION_AXES = {
+  x: new THREE.Vector3(1, 0, 0),
+  y: new THREE.Vector3(0, 1, 0),
+  z: new THREE.Vector3(0, 0, 1),
+};
+const ROTATION_GATES = { x: gateRx, y: gateRy, z: gateRz };
+
+const rotationSliders = ['x','y','z'].map(ax => ({
+  ax,
+  axis: ROTATION_AXES[ax],
+  gateFn: ROTATION_GATES[ax],
+  slider: document.getElementById(`r${ax}-slider`),
+  val: document.getElementById(`r${ax}-val`),
+}));
+const sliderByAx = Object.fromEntries(rotationSliders.map(r => [r.ax, r]));
+
+function syncSliderDom() {
+  for (const r of rotationSliders) {
+    const deg = sliderRads[r.ax] * 180 / Math.PI;
+    r.slider.value = Math.round(deg / 5) * 5;
+    r.val.textContent = formatAngle(sliderRads[r.ax]);
+  }
+}
+
+// Decompose state into Euler angles so the sliders display the rotation
+// that took |0⟩ to the current bloch position.
+function inferSlidersFromState() {
+  const b = blochOf(state1);
+  const r2 = b.x*b.x + b.y*b.y + b.z*b.z;
+  if (r2 < 0.998) {
+    sliderRads.x = sliderRads.y = sliderRads.z = 0;
+  } else {
+    const y = Math.max(-1, Math.min(1, b.y));
+    sliderRads.x = -Math.asin(y);
+    const cosRx = Math.sqrt(Math.max(0, 1 - y * y));
+    sliderRads.y = cosRx < 1e-3 ? 0 : Math.atan2(b.x, b.z);
+    sliderRads.z = 0;
+  }
+  syncSliderDom();
+  if (activeAx) fadeOrbitAndAxis(sphere0);
+  activeAx = null;
+}
+
+function cancelFade(sphere) {
+  if (sphere.fadeHandle) {
+    cancelAnimationFrame(sphere.fadeHandle);
+    sphere.fadeHandle = null;
+  }
+}
+
+for (const r of rotationSliders) {
+  r.slider.addEventListener('input', () => {
+    const newRad = parseFloat(r.slider.value) * Math.PI / 180;
+    const delta = newRad - sliderRads[r.ax];
+    r.val.textContent = formatAngle(newRad);
+    sliderRads[r.ax] = newRad;
+    if (isAnimating) return;
+
+    if (activeAx !== r.ax) {
+      activeAx = r.ax;
+      cancelFade(sphere0);
+      clearTrail(sphere0);
+      showRotationAxis(sphere0, r.axis);
+      showRotationOrbit(sphere0, blochOf(state1), r.axis);
+    }
+
+    if (Math.abs(delta) > 1e-6) {
+      state1 = applyU1(r.gateFn(delta), state1);
+    }
+    syncBlochVisuals();
+    updateStateDisplay();
+  });
+
+  // On release, re-derive the sliders from the current state. For an on-axis
+  // rotation the state didn't actually change, so the slider snaps back to
+  // its pre-drag value — visual confirmation that nothing happened.
+  r.slider.addEventListener('change', () => {
+    if (isAnimating) return;
+    if (activeAx !== r.ax) return;
+    inferSlidersFromState();
+  });
+}
+
+document.getElementById('reset-view-btn').addEventListener('click', resetView);
+document.getElementById('clear-history').addEventListener('click', () => {
+  gateHistory = [];
+  document.getElementById('history').innerHTML = '<span class="history-empty">no gates applied yet</span>';
+  document.getElementById('gate-count').textContent = '0 gates';
+});
+
+// localStorage keys (single source of truth — used by theme, rail widths,
+// rail panel order, collapsed state).
+const STORAGE = {
+  theme:      'bloch-theme',
+  leftWidth:  'bloch-left-w',
+  rightWidth: 'bloch-right-w',
+  leftOrder:  'bloch-left-order',
+  rightOrder: 'bloch-right-order',
+  collapsed:  'bloch-collapsed',
+};
+
+function loadList(key) {
+  try { return JSON.parse(localStorage.getItem(key) || '[]'); }
+  catch { return []; }
+}
+function saveList(key, items) {
+  localStorage.setItem(key, JSON.stringify(items));
+}
+
+// THEME — light/dark, persisted in localStorage
+const themeIcon = document.getElementById('theme-icon');
+
+function applyTheme(theme) {
+  document.body.classList.toggle('light-mode', theme === 'light');
+  applyBlochTheme(theme);
+  themeIcon.textContent = theme === 'dark' ? '☾' : '☀';
+}
+
+const storedTheme = localStorage.getItem(STORAGE.theme);
+const initialTheme = (storedTheme === 'light' || storedTheme === 'dark')
+  ? storedTheme
+  : (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+
+document.getElementById('theme-toggle').addEventListener('click', () => {
+  const next = document.body.classList.contains('light-mode') ? 'dark' : 'light';
+  localStorage.setItem(STORAGE.theme, next);
+  applyTheme(next);
+});
+applyTheme(initialTheme);
+
+// ============================================================
+// RESIZE & RENDER LOOP
+// ============================================================
+function resize() {
+  const w = container.clientWidth;
+  const h = container.clientHeight;
+  // updateStyle=true (default) is critical: with setPixelRatio(devicePixelRatio)
+  // the canvas's intrinsic size doubles on retina, and without CSS sizing it
+  // would overflow the container — pushing the rendered scene off-center.
+  renderer.setSize(w, h);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  lineResolution.set(w * window.devicePixelRatio, h * window.devicePixelRatio);
+}
+new ResizeObserver(resize).observe(container);
+
+function animate() {
+  requestAnimationFrame(animate);
+  controls.update();
+  renderer.render(scene, camera);
+}
+
+// ============================================================
+// LAYOUT — desktop rails (resizable) vs. mobile tabbed bottom-sheet
+// ============================================================
+const layoutMq = matchMedia('(max-width: 1023px)');
+
+const leftRail   = document.getElementById('left-rail');
+const rightRail  = document.getElementById('right-rail');
+
+const tabGates   = document.getElementById('tab-gates');
+const tabState   = document.getElementById('tab-state');
+const tabMore    = document.getElementById('tab-more');
+
+const gatesPanel    = document.getElementById('gates-panel');
+const rotPanel      = document.getElementById('rotations-panel');
+const statePanel    = document.getElementById('state-panel');
+const explainPanel  = document.getElementById('explain-panel');
+const presetsPanel  = document.getElementById('presets-panel');
+const historyPanel  = document.getElementById('history-panel');
+
+const RAIL_LAYOUTS = [
+  { rail: leftRail,  panels: [statePanel, rotPanel, explainPanel, historyPanel], key: STORAGE.leftOrder  },
+  { rail: rightRail, panels: [presetsPanel, gatesPanel],                         key: STORAGE.rightOrder },
+];
+const ALL_RAIL_PANELS = RAIL_LAYOUTS.flatMap(l => l.panels);
+
+let layoutIsMobile = null;
+function applyLayout() {
+  const mobile = layoutMq.matches;
+  if (mobile === layoutIsMobile) return;
+  layoutIsMobile = mobile;
+  if (mobile) {
+    tabGates.append(presetsPanel, gatesPanel);
+    tabState.append(statePanel, explainPanel);
+    tabMore.append(rotPanel, historyPanel);
+  } else {
+    // Left rail order: state (short, fixed) → rotations (fixed-height) →
+    // explanation (grows with content) → history (grows with use).
+    leftRail.append(statePanel, rotPanel, explainPanel, historyPanel);
+    rightRail.append(presetsPanel, gatesPanel);
+  }
+  restoreRailLayout();
+}
+layoutMq.addEventListener('change', applyLayout);
+applyLayout();
+
+// Resizable rails: drag handles update CSS variables on <main>; persist in localStorage.
+const RAIL_MIN = 180;
+const RAIL_MAX_PCT = 0.4;
+function setupResizeHandle(handleId, varName, storageKey, side) {
+  const handle = document.getElementById(handleId);
+  const stored = parseInt(localStorage.getItem(storageKey));
+  if (stored && !Number.isNaN(stored)) {
+    document.documentElement.style.setProperty(varName, stored + 'px');
+  }
+  handle.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    handle.setPointerCapture(e.pointerId);
+    handle.classList.add('dragging');
+    const startPx = parseInt(getComputedStyle(document.documentElement).getPropertyValue(varName));
+    const startX = e.clientX;
+    function move(ev) {
+      const dx = ev.clientX - startX;
+      const max = window.innerWidth * RAIL_MAX_PCT;
+      const newW = Math.max(RAIL_MIN, Math.min(max, side === 'left' ? startPx + dx : startPx - dx));
+      document.documentElement.style.setProperty(varName, newW + 'px');
+    }
+    function up() {
+      handle.removeEventListener('pointermove', move);
+      handle.removeEventListener('pointerup', up);
+      handle.classList.remove('dragging');
+      const finalPx = parseInt(getComputedStyle(document.documentElement).getPropertyValue(varName));
+      localStorage.setItem(storageKey, finalPx);
+    }
+    handle.addEventListener('pointermove', move);
+    handle.addEventListener('pointerup', up);
+  });
+}
+setupResizeHandle('resize-left',  '--left-rail-w',  STORAGE.leftWidth,  'left');
+setupResizeHandle('resize-right', '--right-rail-w', STORAGE.rightWidth, 'right');
+
+// Rail panels: collapsible + reorderable. Order (per rail) and collapsed
+// state (shared) persist in localStorage so the arrangement survives reload.
+for (const panel of ALL_RAIL_PANELS) addPanelControls(panel);
+
+function addPanelControls(panel) {
+  const headerRight = panel.querySelector('.panel-header .header-right');
+  if (!headerRight || headerRight.querySelector('.panel-controls')) return;
+  const ctl = document.createElement('span');
+  ctl.className = 'panel-controls';
+  ctl.innerHTML = `
+    <button class="up" title="Move up">▲</button>
+    <button class="down" title="Move down">▼</button>
+    <button class="collapse" title="Collapse / expand">▾</button>
+  `;
+  headerRight.appendChild(ctl);
+  ctl.querySelector('.up').addEventListener('click', e => {
+    e.stopPropagation();
+    movePanel(panel, -1);
+  });
+  ctl.querySelector('.down').addEventListener('click', e => {
+    e.stopPropagation();
+    movePanel(panel, +1);
+  });
+  ctl.querySelector('.collapse').addEventListener('click', e => {
+    e.stopPropagation();
+    panel.classList.toggle('collapsed');
+    saveList(STORAGE.collapsed, ALL_RAIL_PANELS.filter(p => p.classList.contains('collapsed')).map(p => p.id));
+  });
+}
+
+function movePanel(panel, dir) {
+  const parent = panel.parentNode;
+  const sibling = dir < 0 ? panel.previousElementSibling : panel.nextElementSibling;
+  if (!sibling) return;
+  parent.insertBefore(dir < 0 ? panel : sibling, dir < 0 ? sibling : panel);
+  const layout = RAIL_LAYOUTS.find(l => l.rail === parent);
+  if (layout) {
+    const order = [...parent.children].filter(p => layout.panels.includes(p)).map(p => p.id);
+    saveList(layout.key, order);
+  }
+  refreshArrowEnabled();
+}
+
+function isVisible(el) { return el.offsetParent !== null; }
+function siblingTowards(el, dir) {
+  let s = dir < 0 ? el.previousElementSibling : el.nextElementSibling;
+  while (s && !isVisible(s)) s = dir < 0 ? s.previousElementSibling : s.nextElementSibling;
+  return s;
+}
+
+function refreshArrowEnabled() {
+  for (const panel of ALL_RAIL_PANELS) {
+    const ctl = panel.querySelector('.panel-controls');
+    if (!ctl) continue;
+    ctl.querySelector('.up').disabled   = !siblingTowards(panel, -1);
+    ctl.querySelector('.down').disabled = !siblingTowards(panel, +1);
+  }
+}
+
+function restoreRailLayout() {
+  if (layoutIsMobile) {
+    // Panels live in tab-panes on mobile; no order to restore, but we
+    // still need refreshArrowEnabled so first/last arrows are dimmed.
+    refreshArrowEnabled();
+    return;
+  }
+  for (const layout of RAIL_LAYOUTS) {
+    for (const id of loadList(layout.key)) {
+      const p = document.getElementById(id);
+      if (p && p.parentNode === layout.rail && p !== layout.rail.lastElementChild) {
+        layout.rail.appendChild(p);
+      }
+    }
+  }
+  const collapsed = loadList(STORAGE.collapsed);
+  for (const p of ALL_RAIL_PANELS) p.classList.toggle('collapsed', collapsed.includes(p.id));
+  refreshArrowEnabled();
+}
+restoreRailLayout();
+
+// Tab switcher
+document.querySelectorAll('.tab-bar button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const tab = btn.dataset.tab;
+    document.querySelectorAll('.tab-bar button').forEach(b => b.classList.toggle('active', b === btn));
+    document.querySelectorAll('.tab-pane').forEach(p => p.classList.toggle('active', p.dataset.tab === tab));
+  });
+});
+
+// Init
+resize();
+buildPresets();
+syncBlochVisuals();
+updateStateDisplay();
+animate();
+</script>
+</body>
+</html>
