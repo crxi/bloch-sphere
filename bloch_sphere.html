@@ -237,15 +237,59 @@
     pointer-events: none;
   }
 
-  /* View controls (floating buttons over scene) */
+  /* View controls (floating over scene): zoom slider + reset button. */
   .view-controls {
     position: absolute;
     top: 14px;
     right: 14px;
     display: flex;
-    flex-direction: column;
-    gap: 4px;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
     z-index: 10;
+  }
+
+  .zoom-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 120px;
+    height: 30px;
+    background: var(--view-btn-bg);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    border: 1px solid var(--border-bright);
+    border-radius: 3px;
+    padding: 0 10px;
+    cursor: pointer;
+    transition: border-color 0.15s;
+  }
+  .zoom-slider:hover { border-color: var(--accent); }
+  .zoom-slider::-webkit-slider-runnable-track {
+    height: 2px;
+    background: var(--border-bright);
+    border-radius: 1px;
+  }
+  .zoom-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 12px;
+    height: 12px;
+    background: var(--accent);
+    border-radius: 50%;
+    margin-top: -5px;
+    cursor: pointer;
+  }
+  .zoom-slider::-moz-range-track {
+    height: 2px;
+    background: var(--border-bright);
+    border-radius: 1px;
+  }
+  .zoom-slider::-moz-range-thumb {
+    width: 12px;
+    height: 12px;
+    background: var(--accent);
+    border-radius: 50%;
+    cursor: pointer;
+    border: none;
   }
 
   .view-btn {
@@ -678,14 +722,21 @@
     }
 
     .corner { display: none; }
+    /* Mobile: park the |ψ⟩ overlay at the bottom in the row that
+       desktop uses for the drag/zoom hint. The sphere is already
+       cramped at <50dvh — the bottom strip is unused real estate. */
     .state-overlay {
-      top: 12px;
-      left: 12px;
+      top: auto;
+      bottom: 10px;
+      left: 10px;
+      right: 10px;
+      max-width: none;
       padding: 6px 9px;
-      font-size: 9px;
+      font-size: 10px;
       gap: 2px;
     }
-    .scene-hint { bottom: 14px; left: 16px; font-size: 9px; }
+    .scene-hint { display: none; }
+    .zoom-slider { display: none; }
 
     .view-controls {
       top: 10px;
@@ -777,6 +828,9 @@
       </div>
       <div class="scene-hint">drag · pinch to zoom</div>
       <div class="view-controls">
+        <input type="range" class="zoom-slider" id="zoom-slider"
+               min="2.2" max="10" step="0.05" value="3.84"
+               title="Zoom" aria-label="Zoom">
         <button class="view-btn" id="reset-view-btn" title="Reset to standard orientation">RESET VIEW</button>
       </div>
       <div id="canvas-container"></div>
@@ -1038,6 +1092,11 @@ controls.dampingFactor = 0.08;
 controls.enablePan = false;
 controls.minDistance = 2.2;
 controls.maxDistance = 10;
+// Default zoomSpeed=1.0 makes Mac-trackpad pinch and wheel scroll feel
+// sluggish — many tiny events with a barely-perceptible step. Bumping
+// to 2.5 matches the responsiveness of mobile pinch (which also reads
+// from this value) without overshooting on touch.
+controls.zoomSpeed = 2.5;
 // Touch gestures for mobile: one finger rotate, two finger zoom
 controls.touches = {
   ONE: THREE.TOUCH.ROTATE,
@@ -1847,6 +1906,27 @@ phiSlider.addEventListener('input', () => {
 });
 
 document.getElementById('reset-view-btn').addEventListener('click', resetView);
+
+// Zoom slider — desktop alternative to wheel/trackpad-pinch. Drives the
+// camera distance to controls.target along the current view direction.
+// Two-way bound: dragging the slider zooms the camera, and any other
+// zoom (wheel, pinch, reset-view animation) syncs the slider back.
+const zoomSlider = document.getElementById('zoom-slider');
+let zoomSliderActive = false;
+zoomSlider.addEventListener('pointerdown', () => { zoomSliderActive = true; });
+zoomSlider.addEventListener('pointerup',   () => { zoomSliderActive = false; });
+zoomSlider.addEventListener('input', () => {
+  const target = parseFloat(zoomSlider.value);
+  const dir = camera.position.clone().sub(controls.target);
+  const cur = dir.length();
+  if (cur > 1e-4) camera.position.copy(controls.target).addScaledVector(dir.multiplyScalar(1/cur), target);
+  controls.update();
+});
+controls.addEventListener('change', () => {
+  if (zoomSliderActive) return;
+  const d = camera.position.distanceTo(controls.target);
+  zoomSlider.value = Math.max(parseFloat(zoomSlider.min), Math.min(parseFloat(zoomSlider.max), d));
+});
 document.getElementById('clear-history').addEventListener('click', () => {
   gateHistory = [];
   document.getElementById('history').innerHTML = '<span class="history-empty">no gates applied yet</span>';
