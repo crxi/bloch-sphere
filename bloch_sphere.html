@@ -1902,8 +1902,8 @@ const presetsPanel  = document.getElementById('presets-panel');
 const historyPanel  = document.getElementById('history-panel');
 
 const RAIL_LAYOUTS = [
-  { rail: leftRail,  panels: [statePanel, rotPanel, explainPanel, historyPanel], key: STORAGE.leftOrder  },
-  { rail: rightRail, panels: [presetsPanel, gatesPanel],                         key: STORAGE.rightOrder },
+  { rail: leftRail,  panels: [statePanel, explainPanel, historyPanel],     key: STORAGE.leftOrder  },
+  { rail: rightRail, panels: [presetsPanel, rotPanel, gatesPanel],         key: STORAGE.rightOrder },
 ];
 const ALL_RAIL_PANELS = RAIL_LAYOUTS.flatMap(l => l.panels);
 
@@ -1913,14 +1913,15 @@ function applyLayout() {
   if (mobile === layoutIsMobile) return;
   layoutIsMobile = mobile;
   if (mobile) {
-    tabGates.append(presetsPanel, gatesPanel);
+    tabGates.append(presetsPanel, rotPanel, gatesPanel);
     tabState.append(statePanel, explainPanel);
-    tabMore.append(rotPanel, historyPanel);
+    tabMore.append(historyPanel);
   } else {
-    // Left rail order: state (short, fixed) → rotations (fixed-height) →
-    // explanation (grows with content) → history (grows with use).
-    leftRail.append(statePanel, rotPanel, explainPanel, historyPanel);
-    rightRail.append(presetsPanel, gatesPanel);
+    // Right rail = action panels (set state, apply gates). Left rail =
+    // feedback (current state, explanation, history) so the eye finds
+    // controls on one side and effects on the other.
+    leftRail.append(statePanel, explainPanel, historyPanel);
+    rightRail.append(presetsPanel, rotPanel, gatesPanel);
   }
   restoreRailLayout();
 }
