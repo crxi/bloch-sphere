@@ -11,11 +11,13 @@ and watch the state's Bloch vector rotate around the gate's axis.
 - **Single-qubit gates**: H, X, Y, Z, S, S†, T, T†. Animated rotation
   around the gate's axis with the rotation plane and axis line shown
   during the animation.
-- **Continuous Rx/Ry/Rz sliders**: each slider shows the Euler-angle
-  decomposition of the current state from |0⟩, and dragging applies an
-  incremental rotation. Rotations around an axis through the state's
-  current pole leave the state put (e.g. dragging Rx from |+⟩ doesn't
-  move the arrow; the slider snaps back on release).
+- **θ / φ direct-state sliders**: dragging sets the qubit position
+  directly via |ψ⟩ = cos(θ/2)|0⟩ + e^(iφ) sin(θ/2)|1⟩. An orange
+  parallel-of-latitude (for θ) or meridian-of-longitude (for φ) fades
+  in on the sphere while you drag. After a gate the sliders re-derive
+  via θ = acos(z), φ = atan2(y, x) so they always track the state.
+- **Live state expression**: a top-left canvas overlay shows the
+  symbolic parameterisation above a numeric line for α and β.
 - **Presets**: |0⟩ |+⟩ |+i⟩ on top, |1⟩ |−⟩ |−i⟩ below — antipodes line
   up, columns are the Z / X / Y axes.
 - **Light/dark theme**, persisted in `localStorage`. Sphere wireframe,
@@ -59,9 +61,10 @@ Re-runs are idempotent. After the first deploy, normal updates are just
 
 ## Known gaps
 
-- The slider Euler decomposition is canonical; for arbitrary mixed or
-  non-cardinal states the inferred angles may not match what a textbook
-  would write.
+- The state-ket panel preserves global phase introduced by gates (e.g.
+  Y|0⟩ shows i|1⟩), but the canvas overlay's numeric line is computed
+  from the canonical θ/φ parameterisation and so drops global phase.
+  The two are consistent up to that unobservable factor.
 - No tests in this repo. There's a small suite at
   `/tmp/bloch-test/test-quantum-logic.mjs` (Playwright) that I run
   during development; it's not committed because it's a personal scratch
