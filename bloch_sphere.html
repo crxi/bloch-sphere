@@ -1181,29 +1181,49 @@ function makeBlochSphere() {
   group.add(arrowGroup);
   const arrow = { group: arrowGroup, shaft: arrowShaft, head: arrowHead, shaftMat: arrowShaftMat, headMat: arrowHeadMat };
 
-  // Rotation axis indicator — Line2 for pixel-width control (linewidth on
-  // basic Line is ignored on most platforms).
+  // Rotation axis indicator — front/back Line2 pair sharing geometry. The
+  // front depth-tests against the 0.99 occluder so the inside-the-sphere
+  // segment gets clipped and the line reads as a clean "X-ray"; the back
+  // line renders unconditionally at low opacity to ghost the occluded part.
   const rotAxisGeom = new LineGeometry();
   rotAxisGeom.setPositions([0, 0, -1.45, 0, 0, 1.45]);
-  const rotAxisMat = new LineMaterial({
+  const rotAxisFrontMat = new LineMaterial({
     color: 0xf5d76e, linewidth: 5, transparent: true, opacity: 0,
-    resolution: lineResolution,
+    depthTest: true, resolution: lineResolution,
   });
-  const rotAxis = new Line2(rotAxisGeom, rotAxisMat);
-  rotAxis.computeLineDistances();
-  group.add(rotAxis);
+  const rotAxisBackMat = new LineMaterial({
+    color: 0xf5d76e, linewidth: 5, transparent: true, opacity: 0,
+    depthTest: false, resolution: lineResolution,
+  });
+  const rotAxisFront = new Line2(rotAxisGeom, rotAxisFrontMat);
+  const rotAxisBack  = new Line2(rotAxisGeom, rotAxisBackMat);
+  rotAxisFront.renderOrder = 6;
+  rotAxisBack.renderOrder  = 5;
+  rotAxisFront.computeLineDistances();
+  rotAxisBack.computeLineDistances();
+  group.add(rotAxisBack);
+  group.add(rotAxisFront);
+  const rotAxis = { geom: rotAxisGeom, front: rotAxisFront, back: rotAxisBack };
 
-  // Orbit circle (dashed Line2): previews the rotation plane the state will live on.
+  // Orbit circle (dashed) — same front/back trick. Camera-facing arc is
+  // bright, back arc is a faint dashed ghost behind the sphere.
   const orbitN = 80;
   const orbitGeom = new LineGeometry();
   orbitGeom.setPositions(new Array((orbitN + 1) * 3).fill(0));
-  const orbitMat = new LineMaterial({
+  const orbitBase = {
     color: 0xf5d76e, linewidth: 4, transparent: true, opacity: 0,
     dashed: true, dashSize: 0.07, gapSize: 0.045,
     resolution: lineResolution,
-  });
-  const orbit = new Line2(orbitGeom, orbitMat);
-  group.add(orbit);
+  };
+  const orbitFrontMat = new LineMaterial({ ...orbitBase, depthTest: true });
+  const orbitBackMat  = new LineMaterial({ ...orbitBase, depthTest: false });
+  const orbitFront = new Line2(orbitGeom, orbitFrontMat);
+  const orbitBack  = new Line2(orbitGeom, orbitBackMat);
+  orbitFront.renderOrder = 6;
+  orbitBack.renderOrder  = 5;
+  group.add(orbitBack);
+  group.add(orbitFront);
+  const orbit = { geom: orbitGeom, front: orbitFront, back: orbitBack };
 
   // Trail (Line2): the path the bloch vector traces. Persists until next gate.
   const trailMax = 240;
@@ -1258,7 +1278,7 @@ function makeBlochSphere() {
     group, arrow, rotAxis, orbit, trail,
     thetaIndicator, phiIndicator,
     materials: { wire: wireMat, equator: equatorMat, xCircle: xCircleMat, yCircle: yCircleMat },
-    rotAxisMat, orbitMat, trailMat,
+    rotAxisFrontMat, rotAxisBackMat, orbitFrontMat, orbitBackMat, trailMat,
     themedLabels,
   };
 }
@@ -1294,8 +1314,10 @@ function applyBlochTheme(themeName) {
   sphere0.materials.equator.color.setHex(t.equator);
   sphere0.materials.xCircle.color.setHex(t.greatCircle);
   sphere0.materials.yCircle.color.setHex(t.greatCircle);
-  sphere0.rotAxisMat.color.setHex(t.rotAxis);
-  sphere0.orbitMat.color.setHex(t.orbit);
+  sphere0.rotAxisFrontMat.color.setHex(t.rotAxis);
+  sphere0.rotAxisBackMat.color.setHex(t.rotAxis);
+  sphere0.orbitFrontMat.color.setHex(t.orbit);
+  sphere0.orbitBackMat.color.setHex(t.orbit);
   sphere0.trailMat.color.setHex(t.trail);
   for (const ind of [sphere0.thetaIndicator, sphere0.phiIndicator]) {
     ind.frontMat.color.setHex(t.pathIndicator);
@@ -1342,13 +1364,20 @@ function updateBlochArrow(sphere, x, y, z) {
   sphere.arrow.headMat.color.copy(_arrowMixed);
 }
 
+const ROT_AXIS_FRONT_PEAK = 0.95;
+const ROT_AXIS_BACK_PEAK  = 0.22;
+const ORBIT_FRONT_PEAK    = 0.85;
+const ORBIT_BACK_PEAK     = 0.22;
+
 function showRotationAxis(sphere, axis) {
-  sphere.rotAxis.geometry.setPositions([
+  sphere.rotAxis.geom.setPositions([
     -axis.x * 1.45, -axis.y * 1.45, -axis.z * 1.45,
      axis.x * 1.45,  axis.y * 1.45,  axis.z * 1.45,
   ]);
-  sphere.rotAxis.computeLineDistances();
-  sphere.rotAxis.material.opacity = 0.95;
+  sphere.rotAxis.front.computeLineDistances();
+  sphere.rotAxis.back.computeLineDistances();
+  sphere.rotAxis.front.material.opacity = ROT_AXIS_FRONT_PEAK;
+  sphere.rotAxis.back.material.opacity  = ROT_AXIS_BACK_PEAK;
 }
 // Orbit circle: shows the plane the state will rotate in.
 // Normally the circle through the current bloch vector around the axis.
@@ -1388,9 +1417,11 @@ function showRotationOrbit(sphere, startBloch, axis) {
       center.z + radius * (c * e1.z + s * e2.z)
     );
   }
-  sphere.orbit.geometry.setPositions(points);
-  sphere.orbit.computeLineDistances();
-  sphere.orbit.material.opacity = 0.85;
+  sphere.orbit.geom.setPositions(points);
+  sphere.orbit.front.computeLineDistances();
+  sphere.orbit.back.computeLineDistances();
+  sphere.orbit.front.material.opacity = ORBIT_FRONT_PEAK;
+  sphere.orbit.back.material.opacity  = ORBIT_BACK_PEAK;
 }
 
 function clearTrail(sphere) {
@@ -1582,13 +1613,16 @@ function animateSingleQubitGate(sphere, currentBloch, axis, totalAngle, finalBlo
 function fadeOrbitAndAxis(sphere, duration = 600) {
   return new Promise(resolve => {
     if (sphere.fadeHandle) cancelAnimationFrame(sphere.fadeHandle);
-    const startOrbit = sphere.orbit.material.opacity;
-    const startAxis  = sphere.rotAxis.material.opacity;
-    const startTime  = performance.now();
+    const mats = [
+      sphere.orbit.front.material, sphere.orbit.back.material,
+      sphere.rotAxis.front.material, sphere.rotAxis.back.material,
+    ];
+    const start = mats.map(m => m.opacity);
+    const startTime = performance.now();
     function step(now) {
       const t = Math.min((now - startTime) / duration, 1);
-      sphere.orbit.material.opacity   = startOrbit * (1 - t);
-      sphere.rotAxis.material.opacity = startAxis  * (1 - t);
+      const k = 1 - t;
+      for (let i = 0; i < mats.length; i++) mats[i].opacity = start[i] * k;
       if (t < 1) sphere.fadeHandle = requestAnimationFrame(step);
       else { sphere.fadeHandle = null; resolve(); }
     }
