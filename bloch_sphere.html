@@ -185,16 +185,45 @@
   .corner.bl { bottom: 16px; left: 16px; border-bottom: 1px solid; border-left: 1px solid; }
   .corner.br { bottom: 16px; right: 16px; border-bottom: 1px solid; border-right: 1px solid; }
 
-  .scene-label {
+  /* Live state-expression overlay at top-left of the canvas. The
+     symbolic line shows the parameterisation; the numeric line
+     shows the current α/β with the slider values substituted.
+     pointer-events:none so drag-to-rotate works through the box. */
+  .state-overlay {
     position: absolute;
-    top: 24px;
-    left: 32px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
-    color: var(--text-faint);
-    letter-spacing: 0.15em;
-    text-transform: uppercase;
+    top: 20px;
+    left: 28px;
     pointer-events: none;
+    display: grid;
+    gap: 3px;
+    padding: 8px 12px;
+    background: var(--view-btn-bg);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    line-height: 1.5;
+    color: var(--text);
+    max-width: calc(100% - 60px);
+  }
+  .state-overlay-symbolic {
+    color: var(--text-dim);
+    letter-spacing: 0.01em;
+  }
+  .state-overlay-symbolic sup {
+    font-size: 0.85em;
+    vertical-align: super;
+    line-height: 0;
+  }
+  .state-overlay-numeric .ket {
+    color: var(--accent);
+  }
+  .state-overlay-numeric #overlay-alpha,
+  .state-overlay-numeric #overlay-beta {
+    color: var(--text);
+    font-weight: 500;
   }
 
   .scene-hint {
@@ -649,7 +678,13 @@
     }
 
     .corner { display: none; }
-    .scene-label { top: 14px; left: 16px; font-size: 9px; }
+    .state-overlay {
+      top: 12px;
+      left: 12px;
+      padding: 6px 9px;
+      font-size: 9px;
+      gap: 2px;
+    }
     .scene-hint { bottom: 14px; left: 16px; font-size: 9px; }
 
     .view-controls {
@@ -732,7 +767,14 @@
       <div class="corner tr"></div>
       <div class="corner bl"></div>
       <div class="corner br"></div>
-      <div class="scene-label">STATE · |ψ⟩</div>
+      <div class="state-overlay" aria-live="polite">
+        <div class="state-overlay-symbolic">
+          |ψ⟩ = cos(θ/2)|0⟩ + e<sup>iφ</sup> sin(θ/2)|1⟩
+        </div>
+        <div class="state-overlay-numeric">
+          |ψ⟩ = <span id="overlay-alpha">1.00</span><span class="ket">|0⟩</span> + <span id="overlay-beta">0</span><span class="ket">|1⟩</span>
+        </div>
+      </div>
       <div class="scene-hint">drag · pinch to zoom</div>
       <div class="view-controls">
         <button class="view-btn" id="reset-view-btn" title="Reset to standard orientation">RESET VIEW</button>
@@ -773,25 +815,20 @@
 
     <div class="panel" id="rotations-panel">
       <div class="panel-header">
-        <span>Rotations</span>
-        <span class="header-right"></span>
+        <span>State angles</span>
+        <span class="header-right"><span class="meta">θ / φ</span></span>
       </div>
       <div class="panel-body">
         <div class="rotation-gate">
           <div class="rotation-row">
-            <span class="rotation-label">R<sub>x</sub></span>
-            <input type="range" id="rx-slider" min="-180" max="180" value="0" step="5">
-            <span class="angle-val" id="rx-val">0</span>
+            <span class="rotation-label">θ</span>
+            <input type="range" id="theta-slider" min="0" max="3.14159265" value="0" step="0.01">
+            <span class="angle-val" id="theta-val">0</span>
           </div>
           <div class="rotation-row">
-            <span class="rotation-label">R<sub>y</sub></span>
-            <input type="range" id="ry-slider" min="-180" max="180" value="0" step="5">
-            <span class="angle-val" id="ry-val">0</span>
-          </div>
-          <div class="rotation-row">
-            <span class="rotation-label">R<sub>z</sub></span>
-            <input type="range" id="rz-slider" min="-180" max="180" value="0" step="5">
-            <span class="angle-val" id="rz-val">0</span>
+            <span class="rotation-label">φ</span>
+            <input type="range" id="phi-slider" min="0" max="6.28318530" value="0" step="0.01">
+            <span class="angle-val" id="phi-val">0</span>
           </div>
         </div>
       </div>
@@ -1183,8 +1220,43 @@ function makeBlochSphere() {
   trail.visible = false;
   group.add(trail);
 
+  // Depth occluder for the θ/φ path indicators. An invisible sphere at
+  // radius 0.99 that writes depth but not colour; renderOrder 1 puts it
+  // *after* the arrow/dot (which default to renderOrder 0) so they keep
+  // rendering through, and *before* the indicators (renderOrder 5/6) so
+  // their back arc fails the depth test and reads as faint.
+  const occluder = new THREE.Mesh(
+    new THREE.SphereGeometry(0.99, 36, 24),
+    new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: true, depthTest: true }),
+  );
+  occluder.renderOrder = 1;
+  group.add(occluder);
+
+  // θ/φ path indicators. Two Line2 instances per indicator share one
+  // LineGeometry: the front line uses depthTest:true so the occluder
+  // clips its back arc; the back line uses depthTest:false so a faint
+  // ghost continues all the way around. Net effect is a depth-cued
+  // circle on the sphere that fades after the slider stops moving.
+  function makePathIndicator() {
+    const geom = new LineGeometry();
+    geom.setPositions(new Array((96 + 1) * 3).fill(0));
+    const base = { color: 0xff9d5c, linewidth: 4, transparent: true, opacity: 0, resolution: lineResolution };
+    const frontMat = new LineMaterial({ ...base, depthTest: true });
+    const backMat  = new LineMaterial({ ...base, depthTest: false });
+    const front = new Line2(geom, frontMat);
+    const back  = new Line2(geom, backMat);
+    front.renderOrder = 6;
+    back.renderOrder  = 5;
+    group.add(back);
+    group.add(front);
+    return { geom, front, back, frontMat, backMat };
+  }
+  const thetaIndicator = makePathIndicator();
+  const phiIndicator   = makePathIndicator();
+
   return {
     group, arrow, rotAxis, orbit, trail,
+    thetaIndicator, phiIndicator,
     materials: { wire: wireMat, equator: equatorMat, xCircle: xCircleMat, yCircle: yCircleMat },
     rotAxisMat, orbitMat, trailMat,
     themedLabels,
@@ -1202,12 +1274,14 @@ const BLOCH_THEMES = {
     wire: 0x556a85, equator: 0x4dd4ff, greatCircle: 0x7a849a,
     rotAxis: 0xf5d76e, orbit: 0xf5d76e,
     arrowPure: 0x4dd4ff, arrowMixed: 0x5a6478, trail: 0x4dd4ff,
+    pathIndicator: 0xff9d5c,
     pole: '#ffffff', plus: '#8ee07a', iket: '#ff9d5c', zhat: '#ff5cb4',
   },
   light: {
     wire: 0x9aa3b0, equator: 0x0e8db5, greatCircle: 0x8a92a2,
     rotAxis: 0xc97300, orbit: 0xc97300,
     arrowPure: 0x0072a0, arrowMixed: 0x8a92a2, trail: 0x0072a0,
+    pathIndicator: 0xc46a2a,
     pole: '#1a1f2a', plus: '#3d8a3a', iket: '#c46a2a', zhat: '#b8388e',
   },
 };
@@ -1223,6 +1297,10 @@ function applyBlochTheme(themeName) {
   sphere0.rotAxisMat.color.setHex(t.rotAxis);
   sphere0.orbitMat.color.setHex(t.orbit);
   sphere0.trailMat.color.setHex(t.trail);
+  for (const ind of [sphere0.thetaIndicator, sphere0.phiIndicator]) {
+    ind.frontMat.color.setHex(t.pathIndicator);
+    ind.backMat.color.setHex(t.pathIndicator);
+  }
   for (const { sprite, role } of sphere0.themedLabels) {
     repaintLabel(sprite, t[role]);
   }
@@ -1364,8 +1442,12 @@ function resetView() {
 // APP STATE
 // ============================================================
 let state1 = [C(1), C(0)];      // |0⟩
-const sliderRads = { x: 0, y: 0, z: 0 };
-let activeAx = null;
+// θ/φ slider angles. The sliders are the source of truth for the path
+// indicators (parallel of latitude / meridian of longitude). state1 still
+// owns the bloch vector and global phase; decomposeAngles re-derives θ/φ
+// after gates and presets.
+let theta = 0;
+let phi = 0;
 let gateHistory = [];
 let isAnimating = false;
 
@@ -1380,6 +1462,8 @@ function syncBlochVisuals() {
 const stateKetEl   = document.getElementById('state-ket');
 const coordsGridEl = document.getElementById('coords-grid');
 const purityMetaEl = document.getElementById('purity-meta');
+const overlayAlphaEl = document.getElementById('overlay-alpha');
+const overlayBetaEl  = document.getElementById('overlay-beta');
 
 function updateStateDisplay() {
   const [a, b] = state1;
@@ -1388,17 +1472,39 @@ function updateStateDisplay() {
 
   const bv = blochOf(state1);
   const r = Math.sqrt(bv.x*bv.x + bv.y*bv.y + bv.z*bv.z);
-  const theta = Math.acos(Math.max(-1, Math.min(1, bv.z)));
-  const phi = Math.atan2(bv.y, bv.x);
+  const tDeg = Math.acos(Math.max(-1, Math.min(1, bv.z))) * 180 / Math.PI;
+  const pDeg = Math.atan2(bv.y, bv.x) * 180 / Math.PI;
   coordsGridEl.innerHTML = `
     <span class="k">x</span><span class="v">${bv.x.toFixed(3)}</span>
     <span class="k">y</span><span class="v">${bv.y.toFixed(3)}</span>
     <span class="k">z</span><span class="v">${bv.z.toFixed(3)}</span>
-    <span class="k">θ</span><span class="v">${(theta * 180 / Math.PI).toFixed(1)}°</span>
-    <span class="k">φ</span><span class="v">${(phi * 180 / Math.PI).toFixed(1)}°</span>
+    <span class="k">θ</span><span class="v">${tDeg.toFixed(1)}°</span>
+    <span class="k">φ</span><span class="v">${pDeg.toFixed(1)}°</span>
     <span class="k">|r|</span><span class="v">${r.toFixed(3)} ${r > 0.999 ? '· pure' : '· mixed'}</span>
   `;
   purityMetaEl.textContent = r > 0.999 ? 'pure' : `mixed (|r|=${r.toFixed(2)})`;
+}
+
+// The canvas overlay's numeric line. Derives α/β from canonical θ/φ so it
+// matches the symbolic line above; the state-ket panel still shows state1
+// directly (and so retains any global phase introduced by gates).
+function updateOverlayNumeric() {
+  const halfT = theta / 2;
+  const a = Math.cos(halfT);
+  const sHalf = Math.sin(halfT);
+  const bRe = Math.cos(phi) * sHalf;
+  const bIm = Math.sin(phi) * sHalf;
+  overlayAlphaEl.textContent = fmtNum(a);
+  overlayBetaEl.textContent  = fmtBetaCoeff(bRe, bIm);
+}
+
+function fmtBetaCoeff(re, im) {
+  const eps = 0.001;
+  if (Math.abs(re) < eps && Math.abs(im) < eps) return '0';
+  if (Math.abs(im) < eps) return fmtNum(re);
+  if (Math.abs(re) < eps) return `${fmtNum(im)}i`;
+  const sign = im >= 0 ? '+' : '−';
+  return `(${fmtNum(re)} ${sign} ${fmtNum(Math.abs(im))}i)`;
 }
 
 function fmtComplex(c) {
@@ -1510,7 +1616,7 @@ async function applyGate(name, params = {}) {
   await animateSingleQubitGate(sphere0, before, rot.axis, rot.angle, after);
   state1 = newState;
 
-  inferSlidersFromState();
+  decomposeAngles();
   syncBlochVisuals();
   updateStateDisplay();
   addToHistory(name, params);
@@ -1569,7 +1675,7 @@ function applyPreset(p) {
     case '+i': state1 = [C(SQRT12), C(0, SQRT12)]; break;
     case '-i': state1 = [C(SQRT12), C(0, -SQRT12)]; break;
   }
-  inferSlidersFromState();
+  decomposeAngles();
   syncBlochVisuals();
   updateStateDisplay();
   clearTrail(sphere0);
@@ -1584,91 +1690,127 @@ document.querySelectorAll('.gate-btn').forEach(btn => {
   btn.addEventListener('click', () => applyGate(btn.dataset.gate));
 });
 
-// Sliders display the Euler decomposition of current state. Slider drag
-// applies a delta rotation R_axis(Δ) directly to the current state; release
-// re-infers (so on-axis rotations snap back, off-axis rotations persist).
-const ROTATION_AXES = {
-  x: new THREE.Vector3(1, 0, 0),
-  y: new THREE.Vector3(0, 1, 0),
-  z: new THREE.Vector3(0, 0, 1),
+// θ / φ direct-state sliders. Dragging sets the qubit position immediately
+// via |ψ⟩ = cos(θ/2)|0⟩ + e^(iφ) sin(θ/2)|1⟩ — no animation, no rotation.
+// The orange path indicators (parallel-of-latitude for θ, meridian-of-
+// longitude for φ) fade in while dragging and fade out a moment after.
+const thetaSlider = document.getElementById('theta-slider');
+const phiSlider   = document.getElementById('phi-slider');
+const thetaValEl  = document.getElementById('theta-val');
+const phiValEl    = document.getElementById('phi-val');
+
+function setStateFromAngles() {
+  const halfT = theta / 2;
+  const cT = Math.cos(halfT);
+  const sT = Math.sin(halfT);
+  state1 = [C(cT), C(Math.cos(phi) * sT, Math.sin(phi) * sT)];
+}
+
+// Re-derive θ/φ from the current bloch vector. Used after gates and
+// presets so the sliders track the state. φ is wrapped to [0, 2π) to
+// match the slider range; at the poles (sin θ ≈ 0) φ is degenerate so
+// we keep the previous slider value to avoid a visible jump.
+function decomposeAngles() {
+  const bv = blochOf(state1);
+  theta = Math.acos(Math.max(-1, Math.min(1, bv.z)));
+  if (Math.sin(theta) > 1e-4) {
+    let p = Math.atan2(bv.y, bv.x);
+    if (p < 0) p += 2 * Math.PI;
+    phi = p;
+  }
+  thetaSlider.value = theta;
+  phiSlider.value   = phi;
+  thetaValEl.textContent = formatAngle(theta);
+  phiValEl.textContent   = formatAngle(phi);
+  updateOverlayNumeric();
+}
+
+const N_INDICATOR = 96;
+
+function setThetaPath(t) {
+  // Parallel of latitude at z = cos t, radius sin t — the horizontal
+  // circle the state currently lies on. Slides up/down as θ changes.
+  const r = Math.sin(t);
+  const z = Math.cos(t);
+  const positions = new Array((N_INDICATOR + 1) * 3);
+  for (let i = 0; i <= N_INDICATOR; i++) {
+    const a = (i / N_INDICATOR) * Math.PI * 2;
+    positions[i*3 + 0] = r * Math.cos(a);
+    positions[i*3 + 1] = r * Math.sin(a);
+    positions[i*3 + 2] = z;
+  }
+  sphere0.thetaIndicator.geom.setPositions(positions);
+}
+
+function setPhiPath(p) {
+  // Meridian of longitude at azimuth φ — a great circle through both
+  // poles, parameterised as (sin t·cos φ, sin t·sin φ, cos t) for
+  // t ∈ [0, 2π]. Stays visible at any θ (including the poles, where
+  // the parallel of latitude collapses to a point).
+  const cP = Math.cos(p), sP = Math.sin(p);
+  const positions = new Array((N_INDICATOR + 1) * 3);
+  for (let i = 0; i <= N_INDICATOR; i++) {
+    const a = (i / N_INDICATOR) * Math.PI * 2;
+    const sa = Math.sin(a);
+    positions[i*3 + 0] = sa * cP;
+    positions[i*3 + 1] = sa * sP;
+    positions[i*3 + 2] = Math.cos(a);
+  }
+  sphere0.phiIndicator.geom.setPositions(positions);
+}
+
+// Per-indicator fade. last = wall-time of most recent slider input;
+// tickFade in the animate loop drives the front/back opacity from there.
+const FADE_DELAY_MS = 500;
+const FADE_DUR_MS   = 700;
+const PATH_PEAK     = 0.9;
+const PATH_BACK     = 0.22;
+const fadeState = {
+  theta: { last: 0, active: false },
+  phi:   { last: 0, active: false },
 };
-const ROTATION_GATES = { x: gateRx, y: gateRy, z: gateRz };
-
-const rotationSliders = ['x','y','z'].map(ax => ({
-  ax,
-  axis: ROTATION_AXES[ax],
-  gateFn: ROTATION_GATES[ax],
-  slider: document.getElementById(`r${ax}-slider`),
-  val: document.getElementById(`r${ax}-val`),
-}));
-const sliderByAx = Object.fromEntries(rotationSliders.map(r => [r.ax, r]));
-
-function syncSliderDom() {
-  for (const r of rotationSliders) {
-    const deg = sliderRads[r.ax] * 180 / Math.PI;
-    r.slider.value = Math.round(deg / 5) * 5;
-    r.val.textContent = formatAngle(sliderRads[r.ax]);
+function bumpFade(key) {
+  fadeState[key].last = performance.now();
+  fadeState[key].active = true;
+}
+function tickFade(now) {
+  for (const [key, ind] of [['theta', sphere0.thetaIndicator], ['phi', sphere0.phiIndicator]]) {
+    const f = fadeState[key];
+    if (!f.active) continue;
+    const elapsed = now - f.last;
+    let a;
+    if (elapsed < FADE_DELAY_MS) a = 1;
+    else if (elapsed < FADE_DELAY_MS + FADE_DUR_MS) a = 1 - (elapsed - FADE_DELAY_MS) / FADE_DUR_MS;
+    else { a = 0; f.active = false; }
+    ind.front.material.opacity = a * PATH_PEAK;
+    ind.back.material.opacity  = a * PATH_PEAK * PATH_BACK;
   }
 }
 
-// Decompose state into Euler angles so the sliders display the rotation
-// that took |0⟩ to the current bloch position.
-function inferSlidersFromState() {
-  const b = blochOf(state1);
-  const r2 = b.x*b.x + b.y*b.y + b.z*b.z;
-  if (r2 < 0.998) {
-    sliderRads.x = sliderRads.y = sliderRads.z = 0;
-  } else {
-    const y = Math.max(-1, Math.min(1, b.y));
-    sliderRads.x = -Math.asin(y);
-    const cosRx = Math.sqrt(Math.max(0, 1 - y * y));
-    sliderRads.y = cosRx < 1e-3 ? 0 : Math.atan2(b.x, b.z);
-    sliderRads.z = 0;
-  }
-  syncSliderDom();
-  if (activeAx) fadeOrbitAndAxis(sphere0);
-  activeAx = null;
-}
-
-function cancelFade(sphere) {
-  if (sphere.fadeHandle) {
-    cancelAnimationFrame(sphere.fadeHandle);
-    sphere.fadeHandle = null;
-  }
-}
-
-for (const r of rotationSliders) {
-  r.slider.addEventListener('input', () => {
-    const newRad = parseFloat(r.slider.value) * Math.PI / 180;
-    const delta = newRad - sliderRads[r.ax];
-    r.val.textContent = formatAngle(newRad);
-    sliderRads[r.ax] = newRad;
-    if (isAnimating) return;
-
-    if (activeAx !== r.ax) {
-      activeAx = r.ax;
-      cancelFade(sphere0);
-      clearTrail(sphere0);
-      showRotationAxis(sphere0, r.axis);
-      showRotationOrbit(sphere0, blochOf(state1), r.axis);
-    }
-
-    if (Math.abs(delta) > 1e-6) {
-      state1 = applyU1(r.gateFn(delta), state1);
-    }
-    syncBlochVisuals();
-    updateStateDisplay();
-  });
-
-  // On release, re-derive the sliders from the current state. For an on-axis
-  // rotation the state didn't actually change, so the slider snaps back to
-  // its pre-drag value — visual confirmation that nothing happened.
-  r.slider.addEventListener('change', () => {
-    if (isAnimating) return;
-    if (activeAx !== r.ax) return;
-    inferSlidersFromState();
-  });
-}
+thetaSlider.addEventListener('input', () => {
+  if (isAnimating) return;
+  theta = parseFloat(thetaSlider.value);
+  setStateFromAngles();
+  syncBlochVisuals();
+  updateStateDisplay();
+  thetaValEl.textContent = formatAngle(theta);
+  updateOverlayNumeric();
+  setThetaPath(theta);
+  bumpFade('theta');
+  clearTrail(sphere0);
+});
+phiSlider.addEventListener('input', () => {
+  if (isAnimating) return;
+  phi = parseFloat(phiSlider.value);
+  setStateFromAngles();
+  syncBlochVisuals();
+  updateStateDisplay();
+  phiValEl.textContent = formatAngle(phi);
+  updateOverlayNumeric();
+  setPhiPath(phi);
+  bumpFade('phi');
+  clearTrail(sphere0);
+});
 
 document.getElementById('reset-view-btn').addEventListener('click', resetView);
 document.getElementById('clear-history').addEventListener('click', () => {
@@ -1733,9 +1875,10 @@ function resize() {
 }
 new ResizeObserver(resize).observe(container);
 
-function animate() {
+function animate(now) {
   requestAnimationFrame(animate);
   controls.update();
+  tickFade(now || performance.now());
   renderer.render(scene, camera);
 }
 
@@ -1913,6 +2056,7 @@ resize();
 buildPresets();
 syncBlochVisuals();
 updateStateDisplay();
+decomposeAngles();
 animate();
 </script>
 </body>
