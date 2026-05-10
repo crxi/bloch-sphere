@@ -252,18 +252,20 @@
   .zoom-slider {
     -webkit-appearance: none;
     appearance: none;
-    width: 120px;
+    width: 110px;
     height: 30px;
-    background: var(--view-btn-bg);
-    backdrop-filter: blur(6px);
-    -webkit-backdrop-filter: blur(6px);
-    border: 1px solid var(--border-bright);
-    border-radius: 3px;
-    padding: 0 10px;
+    background: transparent;
     cursor: pointer;
-    transition: border-color 0.15s;
   }
-  .zoom-slider:hover { border-color: var(--accent); }
+  .zoom-mark {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    color: var(--text-dim);
+    user-select: none;
+    line-height: 1;
+    width: 10px;
+    text-align: center;
+  }
   .zoom-slider::-webkit-slider-runnable-track {
     height: 2px;
     background: var(--border-bright);
@@ -828,9 +830,11 @@
       </div>
       <div class="scene-hint">drag · pinch to zoom</div>
       <div class="view-controls">
+        <span class="zoom-mark zoom-mark-out" aria-hidden="true">−</span>
         <input type="range" class="zoom-slider" id="zoom-slider"
-               min="2.2" max="10" step="0.05" value="3.84"
-               title="Zoom" aria-label="Zoom">
+               min="2.2" max="10" step="0.05" value="8.36"
+               title="Zoom (left = out, right = in)" aria-label="Zoom">
+        <span class="zoom-mark zoom-mark-in" aria-hidden="true">+</span>
         <button class="view-btn" id="reset-view-btn" title="Reset to standard orientation">RESET VIEW</button>
       </div>
       <div id="canvas-container"></div>
@@ -1092,11 +1096,11 @@ controls.dampingFactor = 0.08;
 controls.enablePan = false;
 controls.minDistance = 2.2;
 controls.maxDistance = 10;
-// Default zoomSpeed=1.0 makes Mac-trackpad pinch and wheel scroll feel
-// sluggish — many tiny events with a barely-perceptible step. Bumping
-// to 2.5 matches the responsiveness of mobile pinch (which also reads
-// from this value) without overshooting on touch.
-controls.zoomSpeed = 2.5;
+// OrbitControls' default wheel handler applies a fixed step per event
+// regardless of deltaY magnitude, which feels glacial against Mac
+// trackpad pinch (deltaY in the 1–10 range, ctrlKey=true). We replace
+// it with a deltaY-scaled handler below; controls.enableZoom stays on
+// so OrbitControls' touch-pinch path keeps working on mobile.
 // Touch gestures for mobile: one finger rotate, two finger zoom
 controls.touches = {
   ONE: THREE.TOUCH.ROTATE,
@@ -1907,26 +1911,54 @@ phiSlider.addEventListener('input', () => {
 
 document.getElementById('reset-view-btn').addEventListener('click', resetView);
 
-// Zoom slider — desktop alternative to wheel/trackpad-pinch. Drives the
-// camera distance to controls.target along the current view direction.
+// Zoom slider — desktop alternative to wheel/trackpad-pinch. The slider
+// thumb position is INVERSELY mapped to camera distance so that left =
+// zoomed out and right = zoomed in (matches the −/+ marks alongside it).
 // Two-way bound: dragging the slider zooms the camera, and any other
 // zoom (wheel, pinch, reset-view animation) syncs the slider back.
 const zoomSlider = document.getElementById('zoom-slider');
+const ZOOM_MIN = parseFloat(zoomSlider.min);
+const ZOOM_MAX = parseFloat(zoomSlider.max);
+const sliderToDistance = (v) => ZOOM_MIN + ZOOM_MAX - v;
+const distanceToSlider = (d) => ZOOM_MIN + ZOOM_MAX - d;
+
+function setCameraDistance(dist) {
+  const clamped = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, dist));
+  const dir = camera.position.clone().sub(controls.target);
+  const cur = dir.length();
+  if (cur > 1e-4) camera.position.copy(controls.target).addScaledVector(dir.multiplyScalar(1/cur), clamped);
+  controls.update();
+}
+
 let zoomSliderActive = false;
 zoomSlider.addEventListener('pointerdown', () => { zoomSliderActive = true; });
 zoomSlider.addEventListener('pointerup',   () => { zoomSliderActive = false; });
 zoomSlider.addEventListener('input', () => {
-  const target = parseFloat(zoomSlider.value);
-  const dir = camera.position.clone().sub(controls.target);
-  const cur = dir.length();
-  if (cur > 1e-4) camera.position.copy(controls.target).addScaledVector(dir.multiplyScalar(1/cur), target);
-  controls.update();
+  setCameraDistance(sliderToDistance(parseFloat(zoomSlider.value)));
 });
 controls.addEventListener('change', () => {
   if (zoomSliderActive) return;
   const d = camera.position.distanceTo(controls.target);
-  zoomSlider.value = Math.max(parseFloat(zoomSlider.min), Math.min(parseFloat(zoomSlider.max), d));
+  zoomSlider.value = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, distanceToSlider(d)));
 });
+
+// Custom wheel zoom — replaces OrbitControls' fixed-step wheel handler
+// with one that scales by deltaY magnitude, so a hard scroll or fast
+// trackpad pinch zooms more than a gentle one. Capture phase + stop-
+// ImmediatePropagation prevents OrbitControls' bubble-phase wheel
+// listener from firing, but its touch-pinch path is untouched (mobile
+// pinch still uses OrbitControls' own gesture math, which already
+// feels right).
+renderer.domElement.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  e.stopImmediatePropagation();
+  // exp() makes the response feel uniform across deltaY scales: a Mac
+  // trackpad pinch sends ctrlKey:true with deltaY ≈ 1–30, a notched
+  // mouse wheel sends ≈ 100. The 0.012 factor was tuned so a typical
+  // pinch gesture covers ~half the zoom range over a normal swipe.
+  const factor = Math.exp(e.deltaY * 0.012);
+  setCameraDistance(camera.position.distanceTo(controls.target) * factor);
+}, { capture: true, passive: false });
 document.getElementById('clear-history').addEventListener('click', () => {
   gateHistory = [];
   document.getElementById('history').innerHTML = '<span class="history-empty">no gates applied yet</span>';
